@@ -59,6 +59,22 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
+    elif args.algo == 'edp':
+        from agents.ql_edp import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
     elif args.algo == 'bc':
         from agents.bc_diffusion import Diffusion_BC as Agent
         agent = Agent(state_dim=state_dim,
@@ -73,7 +89,149 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
 
     early_stop = False
     stop_check = utils.EarlyStopping(tolerance=1, min_delta=0.)
-    writer = None  # SummaryWriter(output_dir)
+    writer = SummaryWriter(output_dir)
+
+    evaluations = []
+    training_iters = 0
+    max_timesteps = args.num_epochs * args.num_steps_per_epoch
+    metric = 100.
+    utils.print_banner(f"Training Start", separator="*", num_star=90)
+    while (training_iters < max_timesteps) and (not early_stop):
+        iterations = int(args.eval_freq * args.num_steps_per_epoch)
+        loss_metric = agent.train(data_sampler,
+                                  iterations=iterations,
+                                  batch_size=args.batch_size,
+                                  log_writer=writer)
+        training_iters += iterations
+        curr_epoch = int(training_iters // int(args.num_steps_per_epoch))
+
+        # Logging
+        utils.print_banner(f"Train step: {training_iters}", separator="*", num_star=90)
+        logger.record_tabular('Trained Epochs', curr_epoch)
+        logger.record_tabular('BC Loss', np.mean(loss_metric['bc_loss']))
+        logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
+        logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
+        logger.record_tabular('Critic Loss', np.mean(loss_metric['critic_loss']))
+        logger.dump_tabular()
+
+        # Evaluation
+        eval_res, eval_res_std, eval_norm_res, eval_norm_res_std = eval_policy(agent, args.env_name, args.seed,
+                                                                               eval_episodes=args.eval_episodes)
+        evaluations.append([eval_res, eval_res_std, eval_norm_res, eval_norm_res_std,
+                            np.mean(loss_metric['bc_loss']), np.mean(loss_metric['ql_loss']),
+                            np.mean(loss_metric['actor_loss']), np.mean(loss_metric['critic_loss']),
+                            curr_epoch])
+        np.save(os.path.join(output_dir, "eval"), evaluations)
+        logger.record_tabular('Average Episodic Reward', eval_res)
+        logger.record_tabular('Average Episodic N-Reward', eval_norm_res)
+        logger.dump_tabular()
+
+        bc_loss = np.mean(loss_metric['bc_loss'])
+        if args.early_stop:
+            early_stop = stop_check(metric, bc_loss)
+
+        metric = bc_loss
+
+        if args.save_best_model:
+            agent.save_model(output_dir, curr_epoch)
+
+    # Model Selection: online or offline
+    scores = np.array(evaluations)
+    if args.ms == 'online':
+        best_id = np.argmax(scores[:, 2])
+        best_res = {'model selection': args.ms, 'epoch': scores[best_id, -1],
+                    'best normalized score avg': scores[best_id, 2],
+                    'best normalized score std': scores[best_id, 3],
+                    'best raw score avg': scores[best_id, 0],
+                    'best raw score std': scores[best_id, 1]}
+        with open(os.path.join(output_dir, f"best_score_{args.ms}.txt"), 'w') as f:
+            f.write(json.dumps(best_res))
+    elif args.ms == 'offline':
+        bc_loss = scores[:, 4]
+        top_k = min(len(bc_loss) - 1, args.top_k)
+        where_k = np.argsort(bc_loss) == top_k
+        best_res = {'model selection': args.ms, 'epoch': scores[where_k][0][-1],
+                    'best normalized score avg': scores[where_k][0][2],
+                    'best normalized score std': scores[where_k][0][3],
+                    'best raw score avg': scores[where_k][0][0],
+                    'best raw score std': scores[where_k][0][1]}
+
+        with open(os.path.join(output_dir, f"best_score_{args.ms}.txt"), 'w') as f:
+            f.write(json.dumps(best_res))
+
+    # writer.close()
+    
+
+def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, args):
+    # TODO: implement offline pre-training and online tunning pipline
+    # Load buffer
+    dataset = d4rl.qlearning_dataset(env)
+    data_sampler = Data_Sampler(dataset, device, args.reward_tune)
+    utils.print_banner('Loaded buffer')
+
+    if args.algo == 'ql':
+        from agents.ql_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'edp':
+        from agents.ql_edp import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'qg':
+        from agents.qg_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'bc':
+        from agents.bc_diffusion import Diffusion_BC as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      lr=args.lr)
+
+    early_stop = False
+    stop_check = utils.EarlyStopping(tolerance=1, min_delta=0.)
+    writer = SummaryWriter(output_dir)
 
     evaluations = []
     training_iters = 0
@@ -192,12 +350,16 @@ if __name__ == "__main__":
     ### RL Parameters ###
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
+    
+    ### Online Tunning Parameters ###
+    # TODO: add online tunning parameters
+    parser.add_argument("--lr", default=3e-4, type=float)
 
     ### Diffusion Setting ###
     parser.add_argument("--T", default=5, type=int)
     parser.add_argument("--beta_schedule", default='vp', type=str)
     ### Algo Choice ###
-    parser.add_argument("--algo", default="ql", type=str)  # ['bc', 'ql']
+    parser.add_argument("--algo", default="qg", type=str)  # ['bc', 'ql', 'edp', 'qg']
     parser.add_argument("--ms", default='offline', type=str, help="['online', 'offline']")
     # parser.add_argument("--top_k", default=1, type=int)
 
@@ -209,6 +371,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     args.device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
+    print("cuda", torch.cuda.is_available())
     args.output_dir = f'{args.dir}'
 
     args.num_epochs = hyperparameters[args.env_name]['num_epochs']
@@ -254,8 +417,17 @@ if __name__ == "__main__":
     variant.update(max_action=max_action)
     setup_logger(os.path.basename(results_dir), variant=variant, log_dir=results_dir)
     utils.print_banner(f"Env: {args.env_name}, state_dim: {state_dim}, action_dim: {action_dim}")
-
+    
+    """
     train_agent(env,
+                state_dim,
+                action_dim,
+                max_action,
+                args.device,
+                results_dir,
+                args)
+    """
+    train_and_tune(env,
                 state_dim,
                 action_dim,
                 max_action,

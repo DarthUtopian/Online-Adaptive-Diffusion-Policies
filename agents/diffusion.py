@@ -125,9 +125,7 @@ class Diffusion(nn.Module):
         for i in reversed(range(0, self.n_timesteps)):
             timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
             x = self.p_sample(x, timesteps, state)
-
             progress.update({'t': i})
-
             if return_diffusion: diffusion.append(x)
 
         progress.close()
@@ -136,12 +134,37 @@ class Diffusion(nn.Module):
             return x, torch.stack(diffusion, dim=1)
         else:
             return x
+        
+    def p_sample_approximate(self, state, action, shape, verbose=False, return_diffusion=False, edp=True):
+        # EDP sampling, one step to approximate the action
+        device = self.betas.device
+        batch_size = shape[0]
+        
+        if return_diffusion: diffusion = [action]
+        
+        batch_size = len(action)
+    
+        t = torch.randint(0, self.n_timesteps, (batch_size,), device=action.device).long()
+        x_noisy = self.q_sample(x_start=action, t=t)
+        x_approx = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=self.model(x_noisy, t, state))
+        
+        if return_diffusion: diffusion.append(x_approx)
+        
+        #print("original action: ", action, "approximate action: ", x_approx)
+        if return_diffusion:
+            return x_approx, torch.stack(diffusion, dim=1)
+        else:
+            return x_approx
 
     # @torch.no_grad()
     def sample(self, state, *args, **kwargs):
         batch_size = state.shape[0]
         shape = (batch_size, self.action_dim)
-        action = self.p_sample_loop(state, shape, *args, **kwargs)
+        if "edp" in kwargs:
+            assert "action" in kwargs
+            action = self.p_sample_approximate(state=state, shape=shape, *args, **kwargs)
+        else:
+            action = self.p_sample_loop(state, shape, *args, **kwargs)
         return action.clamp_(-self.max_action, self.max_action)
 
     # ------------------------------------------ training ------------------------------------------#
@@ -156,6 +179,7 @@ class Diffusion(nn.Module):
         )
 
         return sample
+
 
     def p_losses(self, x_start, state, t, weights=1.0):
         noise = torch.randn_like(x_start)
@@ -172,12 +196,39 @@ class Diffusion(nn.Module):
             loss = self.loss_fn(x_recon, x_start, weights)
 
         return loss
+    
+    
+    def p_losses_with_guidance(self, x_start, state, value_func, eta, t, weights=1.0):
+        noise = torch.randn_like(x_start)
 
-    def loss(self, x, state, weights=1.0):
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        x_recon = self.model(x_noisy, t, state)
+        
+        assert noise.shape == x_recon.shape
+        
+        x_noisy = x_noisy.requires_grad_()
+        if self.predict_epsilon:
+            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon)
+            q1, q2 = value_func(state, x_start_mean)
+            #print("q1: ", q1, "q2: ", q2)
+            q_score = torch.autograd.grad(outputs=torch.mean(torch.min(q1, q2)), inputs=x_noisy)[0]
+            loss = self.loss_fn(x_recon, noise - eta * q_score, weights)
+        else:
+            raise NotImplementedError
+
+        return loss
+    
+
+    def loss(self, x, state, weights=1.0, **kwargs):
         batch_size = len(x)
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
         return self.p_losses(x, state, t, weights)
 
+    def loss_with_guidance(self, x, state, value_func, eta, weights=1.0, **kwargs):
+        batch_size = len(x)
+        t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
+        return self.p_losses_with_guidance(x, state, value_func, eta, t, weights)
+    
     def forward(self, state, *args, **kwargs):
         return self.sample(state, *args, **kwargs)
 
