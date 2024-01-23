@@ -32,7 +32,7 @@ python main.py --env_name walker2d-medium-expert-v2 --device 0 --ms online --lr_
 ```
 D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-expert-v2 --exp one_sample --device 0 --T 5 --ms online --lr_decay
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-expert-v2 --exp one_sample --device 0 --T 5 --ms online --lr_decay
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-replay-v2 --exp dist --device 0 --T 5 --ms online --lr_decay
 ```
 
 For conducting 'offline model selection', run the code below. The best_score will be stored in the `best_score_offline.txt` file.
