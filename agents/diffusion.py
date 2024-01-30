@@ -202,15 +202,36 @@ class Diffusion(nn.Module):
         noise = torch.randn_like(x_start)
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        x_noisy = x_noisy.requires_grad_() # enable gradient computation
+        x_recon = self.model(x_noisy, t, state)
+        
+        assert noise.shape == x_recon.shape
+        
+        if self.predict_epsilon:
+            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon.detach().clone())
+            q1, q2 = value_func(state, x_start_mean)
+            #print("q1: ", q1, "q2: ", q2)
+            q_score = torch.autograd.grad(outputs=torch.mean(torch.min(q1, q2)), inputs=x_noisy)[0]
+            loss = self.loss_fn(x_recon, noise - eta * q_score, weights)
+        else:
+            raise NotImplementedError
+
+        return loss
+    
+    
+    def p_losses_with_guidance_old(self, x_start, state, value_func, eta, t, weights=1.0):
+        noise = torch.randn_like(x_start)
+
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        
         x_recon = self.model(x_noisy, t, state)
         
         assert noise.shape == x_recon.shape
         
         x_noisy = x_noisy.requires_grad_()
         if self.predict_epsilon:
-            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon)
+            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon.detach().clone())
             q1, q2 = value_func(state, x_start_mean)
-            #print("q1: ", q1, "q2: ", q2)
             q_score = torch.autograd.grad(outputs=torch.mean(torch.min(q1, q2)), inputs=x_noisy)[0]
             loss = self.loss_fn(x_recon, noise - eta * q_score, weights)
         else:

@@ -5,13 +5,23 @@ import time
 import math
 import torch
 import numpy as np
+import os
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 
 def print_banner(s, separator="-", num_star=60):
 	print(separator * num_star, flush=True)
 	print(s, flush=True)
 	print(separator * num_star, flush=True)
+ 
 
+def make_gif(frames, save_dir, save_name, fps=30) -> None:
+    patch = plt.imshow(frames[0])
+    plt.axis('off')
+    def animate(i): patch.set_data(frames[i])
+    anim = FuncAnimation(plt.gcf(), animate, frames=len(frames), interval=1)
+    anim.save(os.path.join(save_dir, save_name), writer='pillow', fps=fps)
 
 class Progress:
 

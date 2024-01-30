@@ -31,11 +31,14 @@ The best_score will be stored in the `best_score_online.txt` file.
 python main.py --env_name walker2d-medium-expert-v2 --device 0 --ms online --lr_decay
 ```
 ```
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-expert-v2 --exp one_sample --device 0 --T 5 --ms online --lr_decay
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-random-v2 --exp dist --device 0 --T 5 --ms dist --lr_decay
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-replay-v2 --exp dist --device 0 --T 5 --ms online --lr_decay
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name antmaze-large-diverse-v0 --exp dist --device 0 --T 5 --ms online --lr_decay --save_best_model
 ```
-
+For online tuning:
+```
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-expert-v2 --exp online --device 1 --T 5 --ms online --lr_decay --training_mode=online
+```
 For conducting 'offline model selection', run the code below. The best_score will be stored in the `best_score_offline.txt` file.
 ```.bash
 python main.py --env_name walker2d-medium-expert-v2 --device 0 --ms offline --lr_decay --early_stop
