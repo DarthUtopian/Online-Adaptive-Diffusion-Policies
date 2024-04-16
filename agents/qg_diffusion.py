@@ -1,6 +1,3 @@
-#PyTorch implementation of EDP (Nips 2023)
-#By Haotian LIn, 2023-12-25
-
 import copy
 import numpy as np
 import torch
@@ -8,10 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils.logger import logger
-
+from tqdm import trange, tqdm
 from agents.diffusion import Diffusion
 from agents.model import MLP
-from agents.helpers import EMA
+from agents.helpers import EMA, SinusoidalPosEmb
 
 
 class Critic(nn.Module):
@@ -41,7 +38,11 @@ class Critic(nn.Module):
         x = torch.cat([state, action], dim=-1)
         return self.q1_model(x)
 
-    def q_min(self, state, action):
+    def q2(self, state, action):
+        x = torch.cat([state, action], dim=-1)
+        return self.q2_model(x)
+    
+    def q_min(self, state, action=None):
         q1, q2 = self.forward(state, action)
         return torch.min(q1, q2)
 
@@ -98,17 +99,21 @@ class Diffusion_QL(object):
         self.eta = eta  # q_learning weight
         self.device = device
         self.max_q_backup = max_q_backup
+        self.num_updates = 1#64 #TODO: set this in kargs
 
     def step_ema(self):
         if self.step < self.step_start_ema:
             return
         self.ema.update_model_average(self.ema_model, self.actor)
 
-    def train(self, replay_buffer, iterations, batch_size=100, log_writer=None):
+    def train(self, replay_buffer, iterations, batch_size=100, log_writer=None, train_mode='offline'):
 
         metric = {'bc_loss': [], 'ql_loss': [], 'actor_loss': [], 'critic_loss': []}
-        for _ in range(iterations):
+        for i in tqdm(range(iterations), ncols=80):
             # Sample replay buffer / batch
+            if train_mode == 'online' and i % self.num_updates == 0:
+                replay_buffer.collect_rollouts(self)
+        
             state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 
             """ Q Training """
@@ -139,6 +144,8 @@ class Diffusion_QL(object):
             """ Policy Training """
             
             """
+            bc_loss = self.actor.loss(action, state)
+            new_action = self.actor(state)
             q1_new_action, q2_new_action = self.critic(state, new_action)
             if np.random.uniform() > 0.5:
                 q_loss = - q1_new_action.mean() / q2_new_action.abs().mean().detach()
@@ -146,14 +153,18 @@ class Diffusion_QL(object):
                 q_loss = - q2_new_action.mean() / q1_new_action.abs().mean().detach()
             actor_loss = bc_loss + self.eta * q_loss
             """
-            
-            actor_loss = self.actor.loss_with_guidance(action, state, self.critic, self.eta)
+            actor_loss, bc_loss = self.actor.loss_with_guidance(action, state, self.critic, self.eta)
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
             if self.grad_norm > 0: 
                 actor_grad_norms = nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_norm, norm_type=2)
             self.actor_optimizer.step()
 
+            """ Enable Value Guidance """
+            curr_mean_bc_loss = np.mean(metric['bc_loss'])
+            if i > 10 and curr_mean_bc_loss < 0.2 and self.actor.improve == False:
+                self.actor.improve = True
+                print(f"Enable Value Guidance {curr_mean_bc_loss}")
 
             """ Step Target network """
             if self.step % self.update_ema_every == 0:
@@ -175,7 +186,7 @@ class Diffusion_QL(object):
                 log_writer.add_scalar('Target_Q Mean', target_q.mean().item(), self.step)
 
             metric['actor_loss'].append(actor_loss.item())
-            #metric['bc_loss'].append(bc_loss.item())
+            metric['bc_loss'].append(bc_loss.item())
             #metric['ql_loss'].append(q_loss.item())
             metric['critic_loss'].append(critic_loss.item())
 
@@ -187,12 +198,28 @@ class Diffusion_QL(object):
 
     def sample_action(self, state):
         state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
-        state_rpt = torch.repeat_interleave(state, repeats=50, dim=0)
+        state_rpt = torch.repeat_interleave(state, repeats=1, dim=0) #50
         with torch.no_grad():
             action = self.actor.sample(state_rpt)
             q_value = self.critic_target.q_min(state_rpt, action).flatten()
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
+    
+    def sample(self, state):
+        # batched states
+        state = torch.FloatTensor(state).to(self.device)
+        with torch.no_grad():
+            action = self.actor.sample(state)
+            q_value = self.critic_target.q_min(state, action)
+        return action.cpu().data.numpy(), q_value.cpu().data.numpy()
+    
+    def evaluate_diff_action(self, state):
+        state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
+        state_rpt = torch.repeat_interleave(state, repeats=self.actor.n_timesteps+1, dim=0) #50
+        with torch.no_grad():
+            action, diffused_act = self.actor.sample(state, return_diffusion=True)
+            q_values = self.critic_target.q_min(state_rpt, diffused_act.squeeze(1))
+        return action.cpu().data.numpy().flatten(), q_values.cpu().data.numpy().flatten(), diffused_act.cpu().data.numpy()
 
     def save_model(self, dir, id=None):
         if id is not None:
@@ -209,5 +236,3 @@ class Diffusion_QL(object):
         else:
             self.actor.load_state_dict(torch.load(f'{dir}/actor.pth'))
             self.critic.load_state_dict(torch.load(f'{dir}/critic.pth'))
-
-
