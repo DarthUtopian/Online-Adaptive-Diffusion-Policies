@@ -65,13 +65,13 @@ class Diffusion_BC(object):
 
     def save_model(self, dir, id=None):
         if id is not None:
-            torch.save(self.actor.state_dict(), f'{dir}/actor_{id}.pth')
+            torch.save(self.actor.state_dict(), f'{dir}/bc_actor_{id}.pth')
         else:
-            torch.save(self.actor.state_dict(), f'{dir}/actor.pth')
+            torch.save(self.actor.state_dict(), f'{dir}/bc_actor.pth')
 
     def load_model(self, dir, id=None):
         if id is not None:
-            self.actor.load_state_dict(torch.load(f'{dir}/actor_{id}.pth'))
+            self.actor.load_state_dict(torch.load(f'{dir}/bc_actor_{id}.pth'))
         else:
-            self.actor.load_state_dict(torch.load(f'{dir}/actor.pth'))
+            self.actor.load_state_dict(torch.load(f'{dir}/bc_actor.pth'))
 

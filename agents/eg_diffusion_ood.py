@@ -47,7 +47,8 @@ class Critic(nn.Module):
         return torch.min(q1, q2)
 
 
-class Diffusion_QL(object):
+class Diffusion_EG(object):
+    # TODO: implement OOD detection
     def __init__(self,
                  state_dim,
                  action_dim,
@@ -67,12 +68,16 @@ class Diffusion_QL(object):
                  lr_maxt=1000,
                  grad_norm=1.0,
                  ):
-        print("\nmax_action:", max_action, "\n")#
-        self.model = MLP(state_dim=state_dim, action_dim=action_dim, device=device)
 
+        self.model = MLP(state_dim=state_dim, action_dim=action_dim, device=device)
         self.actor = Diffusion(state_dim=state_dim, action_dim=action_dim, model=self.model, max_action=max_action,
                                beta_schedule=beta_schedule, n_timesteps=n_timesteps,).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
+        
+        self.bc_model = MLP(state_dim=state_dim, action_dim=action_dim, device=device)
+        self.bc_actor = Diffusion(state_dim=state_dim, action_dim=action_dim, model=self.bc_model, max_action=max_action,
+                               beta_schedule=beta_schedule, n_timesteps=n_timesteps,).to(device)
+        self.bc_actor_optimizer = torch.optim.Adam(self.bc_actor.parameters(), lr=lr)
 
         self.lr_decay = lr_decay
         self.grad_norm = grad_norm
@@ -88,6 +93,7 @@ class Diffusion_QL(object):
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
         if lr_decay:
+            self.bc_actor_lr_scheduler = CosineAnnealingLR(self.bc_actor_optimizer, T_max=lr_maxt, eta_min=0.)
             self.actor_lr_scheduler = CosineAnnealingLR(self.actor_optimizer, T_max=lr_maxt, eta_min=0.)
             self.critic_lr_scheduler = CosineAnnealingLR(self.critic_optimizer, T_max=lr_maxt, eta_min=0.)
 
@@ -99,12 +105,40 @@ class Diffusion_QL(object):
         self.eta = eta  # q_learning weight
         self.device = device
         self.max_q_backup = max_q_backup
+        self.logp_thershold = 1.0 # enable conservative q learning
         self.num_updates = 1#64 #TODO: set this in kargs
 
     def step_ema(self):
         if self.step < self.step_start_ema:
             return
         self.ema.update_model_average(self.ema_model, self.actor)
+        
+    def train_bc(self, replay_buffer, iterations, batch_size=100, log_writer=None):
+        # training behavior cloning diffusion
+        metric = {'bc_loss': []}
+        for i in tqdm(range(iterations), ncols=80):
+            state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
+            """ BC Policy Training """
+            bc_actor_loss = self.bc_actor.loss(action, state)  # bc training
+            
+            self.bc_actor_optimizer.zero_grad()
+            bc_actor_loss.backward()
+            if self.grad_norm > 0: 
+                bc_actor_grad_norms = nn.utils.clip_grad_norm_(self.bc_actor.parameters(), max_norm=self.grad_norm, norm_type=2)
+            self.actor_optimizer.step()
+
+            """ Log """
+            if log_writer is not None:
+                if self.grad_norm > 0:
+                    log_writer.add_scalar('BC Actor Grad Norm', bc_actor_grad_norms.max().item(), self.step)
+                log_writer.add_scalar('BC Actor Loss', bc_actor_loss.item(), self.step)
+
+            metric['bc_loss'].append(bc_actor_loss.item())
+
+        if self.lr_decay: 
+            self.bc_actor_lr_scheduler.step()
+            
+        return metric
 
     def train(self, replay_buffer, iterations, batch_size=100, log_writer=None, train_mode='offline'):
 
@@ -115,6 +149,7 @@ class Diffusion_QL(object):
                 replay_buffer.collect_rollouts(self)
         
             state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
+
             """ Q Training """
             current_q1, current_q2 = self.critic(state, action)
 
@@ -129,11 +164,17 @@ class Diffusion_QL(object):
                 next_action = self.ema_model(next_state)
                 target_q1, target_q2 = self.critic_target(next_state, next_action)
                 target_q = torch.min(target_q1, target_q2)
-            target_q = (reward + not_done * self.discount * target_q).detach()
-            #target_q = reward.detach()#TODO:change it back!
-            
-            critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
 
+            target_q = (reward + not_done * self.discount * target_q).detach()
+
+            critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
+            
+            ### OOD penalty ###
+            with torch.no_grad():
+                logp = self.bc_actor.logp_lower(next_action, next_state)
+            penalty =  (- logp) > self.logp_thershold
+            critic_loss += (penalty * (- logp - self.logp_thershold) * target_q).mean()
+            
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
             if self.grad_norm > 0:
@@ -141,12 +182,6 @@ class Diffusion_QL(object):
             self.critic_optimizer.step()
 
             """ Policy Training """
-            """
-            if np.random.uniform() > 0.5:
-                normal_q = current_q1.abs().mean().detach() + 1.0
-            else:
-                normal_q = current_q2.abs().mean().detach() + 1.0
-            """
             actor_loss, bc_loss = self.actor.loss_with_guidance(action, state, self.critic, self.eta)
             #actor_loss = self.actor.loss(action, state)  # bc testing
             #bc_loss = actor_loss
@@ -156,12 +191,6 @@ class Diffusion_QL(object):
             if self.grad_norm > 0: 
                 actor_grad_norms = nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.grad_norm, norm_type=2)
             self.actor_optimizer.step()
-
-            """ Enable Value Guidance """
-            curr_mean_bc_loss = np.mean(metric['bc_loss'])
-            if i > 10 and curr_mean_bc_loss < 0.2 and self.actor.improve == False:
-                self.actor.improve = True
-                print(f"Enable Value Guidance {curr_mean_bc_loss}")
 
             """ Step Target network """
             if self.step % self.update_ema_every == 0:
@@ -233,3 +262,15 @@ class Diffusion_QL(object):
         else:
             self.actor.load_state_dict(torch.load(f'{dir}/actor.pth'))
             self.critic.load_state_dict(torch.load(f'{dir}/critic.pth'))
+            
+    def save_bc_model(self, dir, id=None):
+        if id is not None:
+            torch.save(self.bc_actor.state_dict(), f'{dir}/bc_actor_{id}.pth')
+        else:
+            torch.save(self.bc_actor.state_dict(), f'{dir}/bc_actor.pth')
+            
+    def load_bc_model(self, dir, id=None):
+        if id is not None:
+            self.bc_actor.load_state_dict(torch.load(f'{dir}/bc_actor_{id}.pth'))
+        else:
+            self.bc_actor.load_state_dict(torch.load(f'{dir}/bc_actor.pth'))

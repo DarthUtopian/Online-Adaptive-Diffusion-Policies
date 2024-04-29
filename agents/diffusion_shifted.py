@@ -1,5 +1,4 @@
-# Copyright 2022 Twitter, Inc and Zhendong Wang.
-# SPDX-License-Identifier: Apache-2.0
+# Designed for VGDP (new version of Diffusion-QG) 2024.4.25
 
 import copy
 import numpy as np
@@ -275,6 +274,19 @@ class Diffusion(nn.Module):
         )
 
         return sample
+    
+    def q_sample_shifted(self, x_start, guidance, eta, t, noise=None):
+        if noise is None:
+            noise = torch.randn_like(x_start)
+        
+        noise = noise + torch.clamp(eta * guidance, -1, 1)
+        
+        sample = (
+            extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
+            + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise 
+        )
+
+        return sample
 
     def p_losses(self, x_start, state, t, weights=1.0):
         noise = torch.randn_like(x_start)
@@ -302,140 +314,32 @@ class Diffusion(nn.Module):
         logp = - F.mse_loss(x_recon, noise, reduction='none').sum(dim=-1)
         return logp
 
-    def p_losses_with_guidance_pred(
-        self, x_start, state, value_func, eta, t, weights=1.0
-    ):
+    def p_losses_with_guidance(self, x_start, state, value_func, eta, t, weights=1.0):
+        x_0 = x_start.detach().clone().requires_grad_()
+        q_01, q_02 = value_func(state, x_0)
+        q_score_0 = torch.autograd.grad(outputs=torch.sum(torch.min(q_01, q_02)), inputs=x_0)[0]
+        ratio = extract(self.sqrt_alphas_cumprod, t, x_start.shape)
+        guidance = ratio * q_score_0
+        
         noise = torch.randn_like(x_start)
-
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        x_noisy = x_noisy.requires_grad_()  # enable gradient computation
+        x_noisy = self.q_sample(x_start=x_start, guidance=guidance, eta=eta, t=t, noise=noise)
         x_recon = self.model(x_noisy, t, state)
-
         assert noise.shape == x_recon.shape
 
         if self.predict_epsilon:
-            x_start_mean = self.predict_start_from_noise(
-                x_t=x_noisy, t=t, noise=x_recon.detach().clone()
-            )
-            q1, q2 = value_func(state, x_start_mean)
-            # print("q1: ", q1, "q2: ", q2)
             """
             if np.random.uniform() > 0.5:
                 q_loss = torch.min(q1, q2).sum() / q2.abs().mean().detach()
             else:
                 q_loss = torch.min(q1, q2).sum() / q1.abs().mean().detach()
-            q_score = torch.autograd.grad(outputs=q_loss, inputs=x_noisy)[0]
-            """
-            q_score = torch.autograd.grad(
-                outputs=torch.sum(torch.min(q1, q2)), inputs=x_noisy
-            )[0]
-            SNR_t = extract(self.alphas_cumprod, t, x_start.shape) / (
-                1 - extract(self.alphas_cumprod, t, x_start.shape)
-            )
-            # weights_guide = torch.min(SNR_t, 5) / SNR_t # TODO: implement the SNR weighting
-
-            guidance = torch.clamp(
-                extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * q_score,
-                -1,
-                1,
-            )
-            # print(f"{t} guidance_shape: ", guidance.shape)
-            # print("guidance: ", guidance)
-            rec_loss = self.loss_fn(
-                x_recon.clone().detach(), noise.clone().detach(), weights
-            )
-            """
-            if rec_loss <= 0.1:
-                self.improve = True
-                print("start improving the policy by Q")
-            if rec_loss > 0.1 and not self.improve:
-                eta = eta * 1e-3
-            """
-            loss = self.loss_fn(x_recon, noise - eta * guidance, weights)
-        else:
-            raise NotImplementedError
-
-        return loss, rec_loss
-
-    def p_losses_with_guidance(self, x_start, state, value_func, normal_q, eta, t, weights=1.0):
-        ## this guidance loss is used for initial Diffusion-QL ##
-        noise = torch.randn_like(x_start)
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        x_recon = self.model(x_noisy, t, state)
-
-        assert noise.shape == x_recon.shape
-
-        if self.predict_epsilon:
-            #x_start = x_start.requires_grad_()
-            #q1, q2 = value_func(state, x_start)
-            #q_score = torch.autograd.grad(outputs=torch.sum(torch.min(q1, q2)), inputs=x_start)[0]
-            
-            #x_0 = x_start.clone().detach().requires_grad_()
-            #q1, q2 = value_func(state, x_0)
-            #q_score = torch.autograd.grad(outputs=torch.sum(torch.min(q1, q2)), inputs=x_0)[0]
-            #ratio = extract(self.sqrt_alphas_cumprod, t, x_0.shape) # x0_new
-            #ratio = 1 / extract(self.sqrt_alphas_cumprod, t, x_0.shape) # test_0
-            
-            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon.detach().clone())
-            x_start_mean = x_start_mean.requires_grad_()
-            q1, q2 = value_func(state, x_start_mean)
-            q_loss = torch.min(q1, q2).sum() / normal_q
             q_score = torch.autograd.grad(outputs=q_loss, inputs=x_start_mean)[0]
-            q_score_norm = torch.linalg.norm(q_score, dim=-1, keepdim=True)
-            #print("normal_q: ", normal_q)#
-            # SNR_t = extract(self.alphas_cumprod, t, x_start.shape) / (1 - extract(self.alphas_cumprod, t, x_start.shape))
-            ratio = extract(
-                self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
-            ) / extract(self.sqrt_alphas_cumprod, t, x_start.shape) # x0_mean
-            #ratio = 1 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #new_base
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 3 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #x0_mean_new
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 2 #snr_test
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * extract(self.sqrt_alphas_cumprod, t, x_start.shape) #snr_real
-            #ratio = 1.0 # equal to multiply by sqrt SNR_t, snr
-            #print("t: ", t)
-            #print("guidance: ", ratio * q_score)
-            guidance = torch.clamp(ratio * q_score, -1, 1)
-            # TODO: use the improvement flag
-            # if not self.improve:
-            #    eta = eta * 1e-4
-            rec_loss = self.loss_fn(
-                x_recon.clone().detach(), noise.clone().detach(), weights
-            )
-            loss = self.loss_fn(x_recon, noise - eta * guidance, weights)
-             
-            weights = weights / torch.clamp(q_score_norm.detach().clone(), 0.8, 5.0)
-            
-            loss = self.loss_fn(x_recon, noise - eta * guidance, weights)
+            """
+            loss = self.loss_fn(x_recon, noise, weights)
+            rec_loss = loss.detach().clone()
         else:
             raise NotImplementedError
 
         return loss, rec_loss
-
-    def p_losses_with_guidance_old(
-        self, x_start, state, value_func, eta, t, weights=1.0
-    ):
-        noise = torch.randn_like(x_start)
-
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-
-        x_recon = self.model(x_noisy, t, state)
-
-        assert noise.shape == x_recon.shape
-
-        x_noisy = x_noisy.requires_grad_()
-        if self.predict_epsilon:
-            x_start_mean = self.predict_start_from_noise(
-                x_t=x_noisy, t=t, noise=x_recon.detach().clone()
-            )
-            q1, q2 = value_func(state, x_start_mean)
-            q_score = torch.autograd.grad(
-                outputs=torch.mean(torch.min(q1, q2)), inputs=x_noisy
-            )[0]
-            loss = self.loss_fn(x_recon, noise - eta * q_score, weights)
-        else:
-            raise NotImplementedError
-
-        return loss
 
     def loss(self, x, state, weights=1.0, **kwargs):
         batch_size = len(x)
@@ -444,9 +348,8 @@ class Diffusion(nn.Module):
 
     def loss_with_guidance(self, x, state, value_func, eta, weights=1.0, **kwargs):
         batch_size = len(x)
-        normal_q = kwargs.get("normal_q", 1.0)
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
-        return self.p_losses_with_guidance(x, state, value_func, normal_q, eta, t, weights)
+        return self.p_losses_with_guidance(x, state, value_func, eta, t, weights)
 
     def forward(self, state, *args, **kwargs):
         return self.sample(state, *args, **kwargs)
