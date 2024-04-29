@@ -25,15 +25,32 @@ Installations of [PyTorch](https://pytorch.org/), [MuJoCo](https://github.com/de
 ### Running
 Running experiments based our code could be quite easy, so below we use `walker2d-medium-expert-v2` dataset as an example. 
 
+For the bandit toy experiments, run the code below. 
+```
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo ql --env_name 8gaussians --exp dql_base --device 0 --T 5 --ms online --lr_decay --mode eval --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name 8gaussians --exp bc_test --device 0 --T 100 --ms online --lr_decay --mode eval
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name rings --exp x0_new_detached --device 1 --T 100 --ms online --lr_decay --mode train --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name 8gaussians --exp new_base_norm --device 1 --T 100 --ms online --lr_decay --mode eval --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo edp --env_name 8gaussians --exp test_edp --device 0 --T 5 --ms online --lr_decay --mode eval --save_best_model
+```
+
 For reproducing the optimal results, we recommend running with 'online model selection' as follows. 
 The best_score will be stored in the `best_score_online.txt` file.
 ```.bash
 python main.py --env_name walker2d-medium-expert-v2 --device 0 --ms online --lr_decay
 ```
 ```
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-random-v2 --exp dist --device 0 --T 5 --ms dist --lr_decay
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-expert-v2 --algo bc --exp bc --device 0 --T 5 --ms online --lr_decay --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name antmaze-large-diverse-v0 --exp dist --device 0 --T 5 --ms online --lr_decay --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-replay-v2 --algo eg_ood --exp eg_ood --device 0 --T 5 --ms online --lr_decay --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name halfcheetah-medium-expert-v2 --algo edp --exp edp_td3 --device 1 --T 5 --ms online --lr_decay --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-expert-v2 --exp x0_mean_w --algo qg --device 0 --T 5 --ms online --lr_decay --save_best_model
 ```
 For online tuning:
 ```

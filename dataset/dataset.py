@@ -78,7 +78,7 @@ def train_data_gen(data, batch_size=256):
             dataset.append(point)
         dataset = np.array(dataset, dtype="float32")
         dataset /= 1.414
-        return dataset, np.array(idxs, dtype="float32")[:, None] / 7.0
+        return dataset, np.array(idxs, dtype="float32")[:, None] / 7.0 # change to 1.0 max action
     
     elif data == "circles":
         data = sklearn.datasets.make_circles(n_samples=batch_size, factor=.5, noise=0.08)[0]

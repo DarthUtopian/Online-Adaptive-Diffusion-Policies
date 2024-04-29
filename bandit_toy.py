@@ -20,17 +20,27 @@ from torch.utils.tensorboard import SummaryWriter
 hyperparameters = {
     "8gaussians": {
         "lr": 3e-4,
-        "eta": 5.0,
+        "eta": 3.0,
+        "max_q_backup": False,
+        "reward_tune": "no",
+        "eval_freq": 50,
+        "num_epochs": 300,
+        "gn": 2.0,
+        "top_k": 1,
+    },  # 5.0
+    "swissroll": {
+        "lr": 3e-4,
+        "eta": 3.0,
         "max_q_backup": False,
         "reward_tune": "no",
         "eval_freq": 50,
         "num_epochs": 200,
         "gn": 2.0,
         "top_k": 1,
-    },  # 5.0
-    "swissroll": {
+    },
+    "rings": {
         "lr": 3e-4,
-        "eta": 0.2,
+        "eta": 3.0,
         "max_q_backup": False,
         "reward_tune": "no",
         "eval_freq": 50,
@@ -47,7 +57,6 @@ def train(env, state_dim, action_dim, max_action, device, output_dir, args):
     dataset = ToyDataset(name=env)
     data_dict = dataset.get_formatted_data(state_dim)
     data_sampler = Data_Sampler(data_dict, device, args.reward_tune)
-    data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     utils.print_banner("Loaded buffer")
 
     if args.algo == "ql":
@@ -209,7 +218,7 @@ def train(env, state_dim, action_dim, max_action, device, output_dir, args):
     # Model Selection: online or offline
 
 
-def eval(env, state_dim, action_dim, max_action, device, log_dir, args):
+def eval(env, state_dim, action_dim, max_action, device, log_dir, args): 
     model_id = 50#args.num_epochs
     with open(os.path.join(log_dir, "variant.json"), "r") as f:
         hyperparams = json.load(f)
@@ -257,10 +266,12 @@ def plot_bandit_scatter(save_dir, tasks, betas, show=False):
         G = gridspec.GridSpec(1, len(betas))
         for j, beta in enumerate(betas):
             plt.subplot(G[0, j])
-            data, e = energy_sample(task, beta=beta, sample_per_state=1000)
+            data, e = energy_sample(task, beta=beta, sample_per_state=2000)
             plt.gca().set_aspect("equal", adjustable="box")
             plt.xlim(-4.5, 4.5)
+            #plt.xlim(-1, 1)
             plt.ylim(-4.5, 4.5)
+            #plt.ylim(-1, 1)
             if j == 0:
                 mappable = plt.scatter(
                     data[:, 0],
@@ -284,9 +295,7 @@ def plot_bandit_scatter(save_dir, tasks, betas, show=False):
                     vmax=1,
                     rasterized=True,
                 )
-                plt.yticks(
-                    ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None]
-                )
+                plt.yticks(ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None])
             axes.append(plt.gca())
             plt.xticks(ticks=[-4, -2, 0, 2, 4], labels=[-4, -2, 0, 2, 4])
             plt.title(f"beta={beta}")
@@ -303,7 +312,9 @@ def plot_bandit_scatter(save_dir, tasks, betas, show=False):
 
 def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
     x_range = torch.linspace(-4.5, 4.5, 90)
+    #x_range = torch.linspace(-1, 1, 90)
     y_range = torch.linspace(-4.5, 4.5, 90)
+    #y_range = torch.linspace(-1, 1, 90)
     a, b = torch.meshgrid(x_range, y_range, indexing="ij")
     id_mat = torch.stack([a, b], dim=-1)
     
@@ -318,7 +329,7 @@ def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
             e = policy.critic.q_min( 
                 id_mat.to(policy.device), 
                 torch.from_numpy(states).float().to(policy.device)
-                ).cpu().detach().numpy()  # sampled action
+                ).cpu().detach().numpy()
             vmin = e[25:65, 25:65].min()
             vmax = e[25:65, 25:65].max()
             plt.gca().set_aspect("equal", adjustable="box")
@@ -329,29 +340,27 @@ def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
                 plt.yticks(ticks=[5, 25, 45, 65, 85], labels=[-4, -2, 0, 2, 4])
             else:
                 plt.imshow(e, origin='lower', vmin=vmin, vmax=vmax, cmap='winter', rasterized=True)
-                plt.yticks(
-                    ticks=[5, 25, 65, 45, 85], labels=[None, None, None, None, None]
-                )
+                plt.yticks(ticks=[5, 25, 65, 45, 85], labels=[None, None, None, None, None])
             plt.xticks(ticks=[5, 25, 65, 45, 85], labels=[-4, -2, 0, 2, 4])
             axes.append(plt.gca())
             plt.title(f"eta={eta}")
             
             # -----plot sample-----
             plt.subplot(G[0, 2*j+1])
-            states = np.zeros((1000, policy.state_dim))
+            states = np.zeros((2000, policy.state_dim))
             data, e = policy.sample(np.array(states))  # sampled action
             plt.gca().set_aspect("equal", adjustable="box")
             plt.xlim(-4.5, 4.5)
+            #plt.xlim(-1, 1)
             plt.ylim(-4.5, 4.5)
+            #plt.ylim(-1, 1)
             plt.scatter(
                 data[:, 0],
                 data[:, 1],
                 s=1,
                 rasterized=True,
             )
-            plt.yticks(
-                ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None]
-            )
+            plt.yticks(ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None])
             plt.xticks(ticks=[-4, -2, 0, 2, 4], labels=[-4, -2, 0, 2, 4])
             axes.append(plt.gca())
             plt.title(f"eta={eta}")
@@ -374,7 +383,7 @@ if __name__ == "__main__":
         "--device", default=0, type=int
     )  # device, {"cpu", "cuda", "cuda:0", "cuda:1"}, etc
     parser.add_argument("--env_name", default="8gaussians", type=str)  # bandit tasks
-    parser.add_argument("--beta", default=5.0, type=float)  # env energy
+    parser.add_argument("--beta", default=3.0, type=float)  # env energy
     parser.add_argument("--dir", default="results_toy", type=str)  # Logging directory
     parser.add_argument("--seed", default=0, type=int)  # Sets PyTorch and Numpy seeds
     parser.add_argument("--num_steps_per_epoch", default=1000, type=int)
@@ -443,7 +452,7 @@ if __name__ == "__main__":
 
     state_dim = 2
     action_dim = 2
-    max_action = 4.5  # TODO: check this
+    max_action = 4.5  #1.0 # TODO
 
     variant.update(state_dim=state_dim)
     variant.update(action_dim=action_dim)
