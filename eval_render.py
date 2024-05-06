@@ -2,25 +2,25 @@ import os
 import json
 import time
 import numpy as np
-import torch
-import matplotlib.pyplot as plt  
+import torch 
 import gym
+import d4rl
 from typing import Dict, List, Tuple, Union, Optional
 from utils import utils
 from utils.logger import logger
 from utils.visualization import plot_results
-from utils.evaluation import eval_policy
-from utils.data_sampler import Online_Sampler
+from utils.evaluation import eval_policy, eval_policy_diffusion
 from torch.utils.tensorboard import SummaryWriter
 
 
 
 if __name__ == "__main__":
-    env_name = 'hopper-medium-expert-v2'
-    log_dir = 'results/hopper-medium-expert-v2|dist|diffusion-qg|T-5|lr_decay|ms-online|0'
-    model_id = 1800
+    env_name = 'antmaze-large-diverse-v0'
+    log_dir = 'results/antmaze-large-diverse-v0|new_base|diffusion-qg|T-5|lr_decay|ms-online|0'
+    model_id = 450
     
-    seed = 100
+    seed = np.random.randint(0, 1000)
+    print("seed: ", seed)
     res = np.load(log_dir+"/eval.npy", allow_pickle=True)
     metric = {'eval_res': res[:, 0]}
     plot_results(metric, 'eval iter', 'reward', env_name, 'rewards', log_dir)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     
     t1 = time.time()
     eval_res, eval_res_std, eval_norm_res, eval_norm_res_std = eval_policy(policy=agent, env_name=env_name, 
-                                                                        seed=seed, eval_episodes=10, render_gif=True, 
+                                                                        seed=seed, eval_episodes=100, render_gif=True, 
                                                                         save_dir=log_dir)
     t2 = time.time()
     eval_time = (t2 - t1)

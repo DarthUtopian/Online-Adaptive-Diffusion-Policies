@@ -5,16 +5,17 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt  
 import gym
+#import d4rl
 from typing import Dict, List, Tuple, Union, Optional
 from utils import utils
 from utils.logger import logger
 from utils.visualization import plot_results
 from utils.evaluation import eval_policy
-from utils.data_sampler import Online_Sampler
+from utils.data_sampler import OffPolicySampler
 from torch.utils.tensorboard import SummaryWriter
 
 
-def online_tuning(env, state_dim, action_dim, max_action, device, output_dir, args):
+def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir, args):
     # TODO: implement offline pre-training and online tunning pipline
 
     if args.algo == 'ql':
@@ -34,7 +35,7 @@ def online_tuning(env, state_dim, action_dim, max_action, device, output_dir, ar
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
     elif args.algo == 'edp':
-        from agents.ql_edp import Diffusion_QL as Agent
+        from agents.edp_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -76,13 +77,16 @@ def online_tuning(env, state_dim, action_dim, max_action, device, output_dir, ar
                       beta_schedule=args.beta_schedule,
                       n_timesteps=args.T,
                       lr=args.lr)
-        
-    data_sampler = Online_Sampler(env, agent, args.batch_size, device, args.reward_tune)
+    
+    # Setting off policy data sampler
+    train_freq = args.batch_size
+    data_sampler = OffPolicySampler(env, 200000, device, train_freq, args.reward_tune)
     
     early_stop = False
     stop_check = utils.EarlyStopping(tolerance=1, min_delta=0.)
     writer = SummaryWriter(output_dir)
     
+    # Start training
     evaluations = []
     training_iters = 0
     max_timesteps = args.num_epochs * args.num_steps_per_epoch
@@ -93,7 +97,8 @@ def online_tuning(env, state_dim, action_dim, max_action, device, output_dir, ar
         loss_metric = agent.train(data_sampler,
                                   iterations=iterations,
                                   batch_size=args.batch_size,
-                                  log_writer=writer)
+                                  log_writer=writer, 
+                                  train_mode='online')
         training_iters += iterations
         curr_epoch = int(training_iters // int(args.num_steps_per_epoch))
 
