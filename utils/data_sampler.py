@@ -6,22 +6,8 @@ import math
 import torch
 import numpy as np
 from typing import Dict, List, Tuple, Union, Optional
-
-
-def reward_tuner(reward_tune, reward, not_done, state = None, action = None,next_state = None):
-    if reward_tune == 'normalize':
-        reward = (reward - reward.mean()) / reward.std()
-    elif reward_tune == 'iql_antmaze':
-        reward = reward - 1.0
-    elif reward_tune == 'iql_locomotion':
-        reward = iql_normalize(reward, not_done)
-    elif reward_tune == 'cql_antmaze':
-        reward = (reward - 0.5) * 4.0
-    elif reward_tune == 'antmaze':
-        reward = (reward - 0.25) * 2.0
-    elif reward_tune == 'antmaze_curiosity':
-        reward = antmaze_curiosity(reward, not_done, state, action, next_state)
-    return reward
+from utils.buffer import ReplayBuffer
+from utils.reward_tuner import reward_tuner
 
 
 class Data_Sampler(object):
@@ -50,74 +36,63 @@ class Data_Sampler(object):
 		)
   
   
-class Online_Sampler(object):
-    def __init__(self, env, agent, batch_size, device, reward_tune='no'):
-        self.agent = agent
+class OffPolicySampler(object):
+    def __init__(self, env, buffer_size, device, train_freq, reward_tune='no'):
         self.env = env
         self.device = device
-        self.batch_size = batch_size
+        self.buffer_size = buffer_size
         self.reward_tune = reward_tune
         self.sample_number = 0
-        self.episode_return = 0.0
         self.obs, self.done = self.env.reset(), False
         self.info = {}
+        self.buffer = ReplayBuffer(env, buffer_size, reward_tune)
+        self.train_freq = train_freq # training steps
         
-    def sample(self, batch_size, **kwargs):
-        states = []
-        actions = []
-        next_states = []
-        rewards = []
-        dones = []
-        for _ in range(self.batch_size):
+    def collect_rollouts(self, agent, **kwargs):
+        t1 = time.time()#
+        collect_step = 0
+        while self._should_collect_more_steps(collect_step):
             batch_state = torch.from_numpy(
                 np.expand_dims(self.obs, axis=0).astype("float32")
             )
-            action = self.agent.sample_action(batch_state)
-            next_state, reward, done, info = self.env.step(action)
+            action = agent.sample_action(batch_state)
+            next_state, reward, self.done, info = self.env.step(action)
             #print('state: ', next_state, 'reward: ', reward, 'done: ', self.done, 'info: ', info)#
             reward = reward_tuner(self.reward_tune, reward, 1-self.done, self.obs, action, next_state) # reward tuning
-            self.episode_return = self.episode_return * (1 - self.done) + reward
             if "TimeLimit.truncated" not in info.keys():
                 info["TimeLimit.truncated"] = False
             if info["TimeLimit.truncated"]:
                 self.done = False
-                
-            states.append(self.obs)
-            actions.append(action)
-            next_states.append(next_state)
-            rewards.append(reward)
-            dones.append(done)
-            self.obs = next_state
-            self.done = done
+        
+            self.buffer.add(self.obs, action, next_state, reward, self.done)
+            collect_step += 1
             self.info = info
+            self.obs = next_state
+            
+            if self.done or info["TimeLimit.truncated"]:
+                self.obs, self.info = self.env.reset(), {}
+                
             self.sample_number += 1
             
-        return (
-      		torch.tensor(states, dtype=torch.float32).to(self.device),
-			torch.tensor(actions, dtype=torch.float32).to(self.device),
-			torch.tensor(next_states, dtype=torch.float32).to(self.device),
-			torch.tensor(rewards, dtype=torch.float32).to(self.device),
-			torch.tensor(dones).to(self.device)
-        )
+        t2 = time.time()#
+        sample_time = t2 - t1#
+        #print("sample_time: ", sample_time)#
+        
+    def sample(self, batch_size):
+        (batch_states, 
+         batch_actions, 
+         batch_next_states, 
+         batch_rewards, 
+         batch_dones) = self.buffer.get_samples(batch_size)
+        return (torch.from_numpy(batch_states).float().to(self.device),
+                torch.from_numpy(batch_actions).float().to(self.device),
+                torch.from_numpy(batch_next_states).float().to(self.device),
+                torch.from_numpy(batch_rewards).float().to(self.device),
+                torch.from_numpy(batch_dones).float().to(self.device))
     
-    def get_sample_number(self):
-        return self.sample_number
-    
-    
-def iql_normalize(reward, not_done):
-	trajs_rt = []
-	episode_return = 0.0
-	for i in range(len(reward)):
-		episode_return += reward[i]
-		if not not_done[i]:
-			trajs_rt.append(episode_return)
-			episode_return = 0.0
-	rt_max, rt_min = torch.max(torch.tensor(trajs_rt)), torch.min(torch.tensor(trajs_rt))
-	reward /= (rt_max - rt_min)
-	reward *= 1000.
-	return reward
-
-def antmaze_curiosity(reward, not_done, state, action, next_state):
-    # reward shaping for antmaze, integrating ICM
-    raise NotImplementedError
-    
+    def _should_collect_more_steps(self, collect_step) -> bool:
+        if collect_step < self.train_freq:
+            return True
+        else:
+            return False
+        
