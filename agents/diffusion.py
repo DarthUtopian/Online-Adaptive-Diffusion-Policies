@@ -366,46 +366,36 @@ class Diffusion(nn.Module):
         assert noise.shape == x_recon.shape
 
         if self.predict_epsilon:
-            #x_start = x_start.requires_grad_()
-            #q1, q2 = value_func(state, x_start)
-            #q_score = torch.autograd.grad(outputs=torch.sum(torch.min(q1, q2)), inputs=x_start)[0]
-            
-            #x_0 = x_start.clone().detach().requires_grad_()
-            #q1, q2 = value_func(state, x_0)
-            #q_score = torch.autograd.grad(outputs=torch.sum(torch.min(q1, q2)), inputs=x_0)[0]
-            #ratio = extract(self.sqrt_alphas_cumprod, t, x_0.shape) # x0_new
-            #ratio = 1 / extract(self.sqrt_alphas_cumprod, t, x_0.shape) # test_0
-            
+            # test0
+            x_0 = x_start.clone().detach().requires_grad_()
+            q1, q2 = value_func(state, x_0)
+            q_score = torch.autograd.grad(outputs=torch.sum(torch.min(q1, q2)), inputs=x_0)[0].clone().detach()
+            """
             x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon.detach().clone())
             x_start_mean = x_start_mean.requires_grad_()
             q1, q2 = value_func(state, x_start_mean)
             q_loss = torch.min(q1, q2).sum() / normal_q
             q_score = torch.autograd.grad(outputs=q_loss, inputs=x_start_mean)[0]
-            q_score_norm = torch.linalg.norm(q_score, dim=-1, keepdim=True)
             #print("normal_q: ", normal_q)#
-            # SNR_t = extract(self.alphas_cumprod, t, x_start.shape) / (1 - extract(self.alphas_cumprod, t, x_start.shape))
-            ratio = extract(
-                self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
-            ) / extract(self.sqrt_alphas_cumprod, t, x_start.shape) # x0_mean
-            #ratio = 1 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #new_base
+            #SNR_t = extract(self.alphas_cumprod, t, x_start.shape) / (1 - extract(self.alphas_cumprod, t, x_start.shape))
+            #ratio = extract(
+            #    self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
+            #) / extract(self.sqrt_alphas_cumprod, t, x_start.shape) # x0_mean
+            ratio = 1 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #new_base
             #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 3 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #x0_mean_new
             #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 2 #snr_test
             #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * extract(self.sqrt_alphas_cumprod, t, x_start.shape) #snr_real
-            #ratio = 1.0 # equal to multiply by sqrt SNR_t, snr
-            #print("t: ", t)
-            #print("guidance: ", ratio * q_score)
+            """
+            ratio = 1.0
+            q_score_norm = torch.linalg.norm(q_score, dim=-1, keepdim=True)
             guidance = torch.clamp(ratio * q_score, -1, 1)
-            # TODO: use the improvement flag
-            # if not self.improve:
-            #    eta = eta * 1e-4
-            rec_loss = self.loss_fn(
-                x_recon.clone().detach(), noise.clone().detach(), weights
-            )
-            loss = self.loss_fn(x_recon, noise - eta * guidance, weights)
-             
-            weights = weights / torch.clamp(q_score_norm.detach().clone(), 0.8, 5.0)
+            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon.detach().clone())
             
-            loss = self.loss_fn(x_recon, noise - eta * guidance, weights)
+            rec_loss = torch.tensor([0.0]).to(x_start.device)
+            #weights = weights / torch.clamp(q_score_norm.detach().clone(), 1.0, 10.0)#
+            #print("q score norm: ", q_score_norm.reshape(-1))
+            #print("guidance norm: ", torch.linalg.norm(guidance, dim=-1))
+            loss = self.loss_fn(x_recon, x_start + eta * guidance, weights)
         else:
             raise NotImplementedError
 
