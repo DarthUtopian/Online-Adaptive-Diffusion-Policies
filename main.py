@@ -12,24 +12,28 @@ import d4rl
 from utils import utils
 from utils.data_sampler import Data_Sampler
 from utils.logger import logger, setup_logger
+from utils.evaluation import eval_policy
+from online import online_offpolicy
 from torch.utils.tensorboard import SummaryWriter
 
 hyperparameters = {
-    'halfcheetah-medium-v2':         {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 9.0,  'top_k': 1},
-    'hopper-medium-v2':              {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 9.0,  'top_k': 2},
-    'walker2d-medium-v2':            {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 1.0,  'top_k': 1},
-    'halfcheetah-medium-replay-v2':  {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'hopper-medium-replay-v2':       {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 2},
-    'walker2d-medium-replay-v2':     {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 1},
-    'halfcheetah-medium-expert-v2':  {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 7.0,  'top_k': 0},
-    'hopper-medium-expert-v2':       {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 2},
-    'walker2d-medium-expert-v2':     {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 1},
-    'antmaze-umaze-v0':              {'lr': 3e-4, 'eta': 0.5,   'max_q_backup': False,  'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 2},
+    'halfcheetah-random-v2':         {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0}, #5.0
+    'walker2d-random-v2':            {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'halfcheetah-medium-v2':         {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'hopper-medium-v2':              {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'walker2d-medium-v2':            {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 1.0,  'top_k': 0}, #1.0
+    'halfcheetah-medium-replay-v2':  {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'hopper-medium-replay-v2':       {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'walker2d-medium-replay-v2':     {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 0}, #1.0
+    'halfcheetah-medium-expert-v2':  {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'hopper-medium-expert-v2':       {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 0},
+    'walker2d-medium-expert-v2':     {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 0},
+    'antmaze-umaze-v0':              {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 2},
     'antmaze-umaze-diverse-v0':      {'lr': 3e-4, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 3.0,  'top_k': 2},
     'antmaze-medium-play-v0':        {'lr': 1e-3, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 1},
     'antmaze-medium-diverse-v0':     {'lr': 3e-4, 'eta': 3.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 1.0,  'top_k': 1},
-    'antmaze-large-play-v0':         {'lr': 3e-4, 'eta': 4.5,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 10.0, 'top_k': 2},
-    'antmaze-large-diverse-v0':      {'lr': 3e-4, 'eta': 3.5,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 1},
+    'antmaze-large-play-v0':         {'lr': 3e-4, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 5.0, 'top_k': 2},
+    'antmaze-large-diverse-v0':      {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 1}, # 1.0 for diff_3
     'pen-human-v1':                  {'lr': 3e-5, 'eta': 0.15,  'max_q_backup': False,  'reward_tune': 'normalize',   'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 2},
     'pen-cloned-v1':                 {'lr': 3e-5, 'eta': 0.1,   'max_q_backup': False,  'reward_tune': 'normalize',   'eval_freq': 50, 'num_epochs': 1000, 'gn': 8.0,  'top_k': 2},
     'kitchen-complete-v0':           {'lr': 3e-4, 'eta': 0.005, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 250 , 'gn': 9.0,  'top_k': 2},
@@ -60,7 +64,39 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
     elif args.algo == 'edp':
-        from agents.ql_edp import Diffusion_QL as Agent
+        from agents.edp_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'qg':
+        from agents.qg_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'eg_ood':
+        from agents.eg_diffusion_ood import Diffusion_EG as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -91,11 +127,38 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
     stop_check = utils.EarlyStopping(tolerance=1, min_delta=0.)
     writer = SummaryWriter(output_dir)
 
+    
+    ### bc training ###
+    max_timesteps_bc = 1000 * args.num_steps_per_epoch
+    utils.print_banner(f"BC Training Start", separator="*", num_star=90)
+    if args.train_bc:
+        while (training_iters < max_timesteps_bc):
+            iterations = int(args.eval_freq * args.num_steps_per_epoch)
+            loss_metric = agent.train_bc(data_sampler,
+                                    iterations=iterations,
+                                    batch_size=args.batch_size,
+                                    log_writer=writer)
+            training_iters += iterations
+            curr_epoch = int(training_iters // int(args.num_steps_per_epoch))
+
+            # Logging
+            utils.print_banner(f"Train step: {training_iters}", separator="*", num_star=90)
+            logger.record_tabular('Trained Epochs', curr_epoch)
+            logger.record_tabular('BC Actor Loss', np.mean(loss_metric['bc_loss']))
+            logger.dump_tabular()
+            bc_loss = np.mean(loss_metric['bc_loss'])
+            if bc_loss < 2e-4:
+                break
+        agent.save_bc_model(output_dir, curr_epoch)
+
+
+    ### agent training ###
     evaluations = []
     training_iters = 0
     max_timesteps = args.num_epochs * args.num_steps_per_epoch
-    metric = 100.
-    utils.print_banner(f"Training Start", separator="*", num_star=90)
+    #agent.load_bc_model("results/halfcheetah-medium-replay-v2|bc|diffusion-bc|T-5|lr_decay|ms-online|0", 1950)##
+    agent.load_bc_model("results/hopper-medium-replay-v2|bc|diffusion-bc|T-5|lr_decay|ms-online|0", 200)##
+    utils.print_banner(f"Policy Training Start", separator="*", num_star=90)
     while (training_iters < max_timesteps) and (not early_stop):
         iterations = int(args.eval_freq * args.num_steps_per_epoch)
         loss_metric = agent.train(data_sampler,
@@ -112,6 +175,8 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
         logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
         logger.record_tabular('Critic Loss', np.mean(loss_metric['critic_loss']))
+        if 'eta_loss' in loss_metrics.keys():
+            logger.record_tabular('Eta Loss', np.mean(loss_metric['eta_loss']))
         logger.dump_tabular()
 
         # Evaluation
@@ -186,7 +251,7 @@ def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, a
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
     elif args.algo == 'edp':
-        from agents.ql_edp import Diffusion_QL as Agent
+        from agents.edp_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -203,6 +268,55 @@ def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, a
                       grad_norm=args.gn)
     elif args.algo == 'qg':
         from agents.qg_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'qg_onestep':
+        from agents.qg_onestep import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'qgedm':
+        from agents.qgedm_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)   
+    elif args.algo == 'awr':
+        ## currently not supported
+        from agents.awr_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -254,11 +368,13 @@ def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, a
         logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
         logger.record_tabular('Critic Loss', np.mean(loss_metric['critic_loss']))
+        if 'eta_loss' in loss_metric.keys():
+            logger.record_tabular('Eta Loss', np.mean(loss_metric['eta_loss']))
         logger.dump_tabular()
 
         # Evaluation
         eval_res, eval_res_std, eval_norm_res, eval_norm_res_std = eval_policy(agent, args.env_name, args.seed,
-                                                                               eval_episodes=args.eval_episodes)
+                                                                               eval_episodes=args.eval_episodes)#, render_gif=True, save_dir=output_dir)
         evaluations.append([eval_res, eval_res_std, eval_norm_res, eval_norm_res_std,
                             np.mean(loss_metric['bc_loss']), np.mean(loss_metric['ql_loss']),
                             np.mean(loss_metric['actor_loss']), np.mean(loss_metric['critic_loss']),
@@ -304,33 +420,6 @@ def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, a
     # writer.close()
 
 
-# Runs policy for X episodes and returns average reward
-# A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=10):
-    eval_env = gym.make(env_name)
-    eval_env.seed(seed + 100)
-
-    scores = []
-    for _ in range(eval_episodes):
-        traj_return = 0.
-        state, done = eval_env.reset(), False
-        while not done:
-            action = policy.sample_action(np.array(state))
-            state, reward, done, _ = eval_env.step(action)
-            traj_return += reward
-        scores.append(traj_return)
-
-    avg_reward = np.mean(scores)
-    std_reward = np.std(scores)
-
-    normalized_scores = [eval_env.get_normalized_score(s) for s in scores]
-    avg_norm_score = eval_env.get_normalized_score(avg_reward)
-    std_norm_score = np.std(normalized_scores)
-
-    utils.print_banner(f"Evaluation over {eval_episodes} episodes: {avg_reward:.2f} {avg_norm_score:.2f}")
-    return avg_reward, std_reward, avg_norm_score, std_norm_score
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     ### Experimental Setups ###
@@ -338,7 +427,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', default=0, type=int)                       # device, {"cpu", "cuda", "cuda:0", "cuda:1"}, etc
     parser.add_argument("--env_name", default="walker2d-medium-expert-v2", type=str)  # OpenAI gym environment name
     parser.add_argument("--dir", default="results", type=str)                    # Logging directory
-    parser.add_argument("--seed", default=0, type=int)                         # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--seed", default=1000, type=int)  #0                  # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--num_steps_per_epoch", default=1000, type=int)
 
     ### Optimization Setups ###
@@ -359,8 +448,11 @@ if __name__ == "__main__":
     parser.add_argument("--T", default=5, type=int)
     parser.add_argument("--beta_schedule", default='vp', type=str)
     ### Algo Choice ###
-    parser.add_argument("--algo", default="qg", type=str)  # ['bc', 'ql', 'edp', 'qg']
+    parser.add_argument("--algo", default="qg", type=str)  # ['bc', 'ql', 'edp', 'qg', 'qgedm', 'eg_ood']
+    parser.add_argument("--ood", default=True, type=bool)
     parser.add_argument("--ms", default='offline', type=str, help="['online', 'offline']")
+    parser.add_argument("--training_mode", default='offline', type=str, help="['offline', 'online']")
+    parser.add_argument("--train_bc", default=False, type=bool) # True
     # parser.add_argument("--top_k", default=1, type=int)
 
     # parser.add_argument("--lr", default=3e-4, type=float)
@@ -427,10 +519,20 @@ if __name__ == "__main__":
                 results_dir,
                 args)
     """
-    train_and_tune(env,
-                state_dim,
-                action_dim,
-                max_action,
-                args.device,
-                results_dir,
-                args)
+    if args.training_mode=='offline':
+        train_and_tune(env,
+                    state_dim,
+                    action_dim,
+                    max_action,
+                    args.device,
+                    results_dir,
+                    args)
+    elif args.training_mode=="online":
+        online_offpolicy(env,
+                    state_dim,
+                    action_dim,
+                    max_action,
+                    args.device,
+                    results_dir,
+                    args)
+    
