@@ -233,11 +233,11 @@ class Diffusion_QL(object):
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
 
-    def sample(self, state):
+    def sample(self, state, *args, **kwargs):
         # batched states
         state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = self.actor.sample(state)
+            action = self.actor.sample(state=state, *args, **kwargs)
             q_value = self.critic_target.q_min(state, action)
         return action.cpu().data.numpy(), q_value.cpu().data.numpy()
 

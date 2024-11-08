@@ -1,6 +1,3 @@
-# Copyright 2022 Twitter, Inc and Zhendong Wang.
-# SPDX-License-Identifier: Apache-2.0
-import math
 import copy
 import numpy as np
 import torch
@@ -146,16 +143,11 @@ class Diffusion(nn.Module):
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
     # @torch.no_grad()
-    def p_sample_loop(self, state, shape, verbose=False, return_diffusion=False, **kwargs):
+    def p_sample_loop(self, state, shape, verbose=False, return_diffusion=False):
         device = self.betas.device
+
         batch_size = shape[0]
-        
-        start_points = kwargs.get("start_points", None)
-        if start_points is not None:
-            assert start_points.shape == shape
-            x = start_points # given start points
-        else:
-            x = torch.randn(shape, device=device)
+        x = torch.randn(shape, device=device)
 
         if return_diffusion:
             diffusion = [x]
@@ -203,18 +195,20 @@ class Diffusion(nn.Module):
             return x_approx, torch.stack(diffusion, dim=1)
         else:
             return x_approx
-    
-    # @torch.no_grad()
-    def p_sample_ddim(self, state, shape, verbose=False, return_diffusion=False, **kwargs):
+
+    def guided_sample_RED(
+        self,
+        state,
+        shape,
+        value_func,
+        lr=0.2,
+        lambd=0.25,
+        verbose=False,
+        return_diffusion=False,
+    ):
         device = self.betas.device
         batch_size = shape[0]
-        start_points = kwargs.get("start_points", None)
-        
-        if start_points is not None:
-            assert start_points.shape == shape
-            x = start_points # given start points
-        else:
-            x = torch.randn(shape, device=device)
+        x = torch.randn(shape, device=device)
 
         if return_diffusion:
             diffusion = [x]
@@ -222,33 +216,33 @@ class Diffusion(nn.Module):
         progress = Progress(self.n_timesteps) if verbose else Silent()
         for i in reversed(range(0, self.n_timesteps)):
             timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
+            x_t = self.q_sample(x, timesteps, state)
             x_0_hat = self.predict_start_from_noise(
-                x_t=x, t=timesteps, noise=self.model(x, timesteps, state)
+                x_t=x_t, t=timesteps, noise=self.model(x_t, timesteps, state)
             )
-            #print("x_0_hat: ", x_0_hat, "t: ", i)
-            if i == 0:
-                x = x_0_hat
-            else:
-                noise = torch.randn_like(x_0_hat)
-                x = self.q_sample(x_start=x_0_hat, t=timesteps-1, noise=noise)
 
+            q1, q2 = value_func(state, x)
+            q_guidance = torch.autograd.grad(
+                outputs=torch.sum(torch.min(q1, q2)), inputs=x
+            )[0]
+            x = x + lr * (q_guidance - lambd * (x - x_0_hat))
             progress.update({"t": i})
             if return_diffusion:
                 diffusion.append(x)
-                
+
         progress.close()
 
         if return_diffusion:
-            return x, torch.stack(diffusion, dim=0)
+            return x, torch.stack(diffusion, dim=1)
         else:
             return x
-            
+
     # @torch.no_grad()
     def sample(self, state, *args, **kwargs):
         batch_size = state.shape[0]
         shape = (batch_size, self.action_dim)
         if "return_diffusion" in kwargs and kwargs["return_diffusion"]:
-            action, diffused_act = self.p_sample_ddim(state, shape, *args, **kwargs) # p_sample_loop
+            action, diffused_act = self.p_sample_loop(state, shape, *args, **kwargs)
             return action, diffused_act
 
         if "edp" in kwargs:
@@ -257,7 +251,7 @@ class Diffusion(nn.Module):
                 state=state, shape=shape, *args, **kwargs
             )
         else:
-            action = self.p_sample_ddim(state, shape, *args, **kwargs) # p_sample_loop
+            action = self.p_sample_loop(state, shape, *args, **kwargs)
         return action.clamp_(-self.max_action, self.max_action)
 
     def guided_sample(self, state, value_func, *args, **kwargs):
@@ -281,7 +275,7 @@ class Diffusion(nn.Module):
 
     def p_losses(self, x_start, state, t, weights=1.0):
         noise = torch.randn_like(x_start)
-
+    
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
 
         x_recon = self.model(x_noisy, t, state)
@@ -310,12 +304,9 @@ class Diffusion(nn.Module):
             return logp, x_start_mean
         else:
             return logp
-
-    def p_losses_with_guidance(
-        self, x_start, state, value_func, eta, t, weights=1.0
-    ):
-        ## this guidance loss is tested for new vgdp 2024.7.9 ##
-        ## under testing ##
+    
+    def p_losses_with_guidance(self, x_start, state, value_func, normal_q, eta, t, weights=1.0):
+        ## this guidance loss is used for initial Diffusion-QL ##
         noise = torch.randn_like(x_start)
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
         x_recon = self.model(x_noisy, t, state)
@@ -323,37 +314,27 @@ class Diffusion(nn.Module):
         assert noise.shape == x_recon.shape
 
         if self.predict_epsilon:
-            x_start_mean = self.predict_start_from_noise(x_t=x_noisy, t=t, noise=x_recon)
-            x_start_mean_clip = torch.clamp(x_start_mean, -self.max_action, self.max_action)
-            q1, q2 = value_func(state, x_start_mean_clip)
+            x_0 = x_start.clone().detach().requires_grad_()
+            q1, q2 = value_func(state, x_0)
+            q_loss = torch.min(q1, q2).sum() 
             #if np.random.uniform() > 0.5:
-            #    q_loss = q1.sum() / q2.abs().mean().detach().clone()
+            #    q_loss = - q1.sum() / q2.abs().mean().detach()
             #else:
-            #    q_loss = q2.sum() / q1.abs().mean().detach().clone()
-            q_loss = torch.min(q1, q2) #.sum()
-            #print("\nq 1:", q1.mean())#
-            """
-            q_score = torch.autograd.grad(outputs=q_loss, inputs=x_start_mean_clip)[0]
-            q_score_norm = torch.linalg.norm(q_score, dim=-1, keepdim=True).detach().clone()
-            #print("\nq 1:", q1.mean())#
-            #print("normal_q: ", q_score_norm.reshape(-1))#
+            #    q_loss = - q2.sum() / q1.abs().mean().detach()
+            q_score = torch.autograd.grad(outputs=q_loss, inputs=x_0)[0].clone().detach()
+            q_score_norm = torch.linalg.norm(q_score, dim=-1, keepdim=True)
+           
             # SNR_t = extract(self.alphas_cumprod, t, x_start.shape) / (1 - extract(self.alphas_cumprod, t, x_start.shape))
-            #ratio = extract(
-            #    self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
-            #) / extract(self.sqrt_alphas_cumprod, t, x_start.shape) # x0_mean
-            ratio = 1.0 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #new_base
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 3 / extract(self.sqrt_alphas_cumprod, t, x_start.shape) #x0_mean_new
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) ** 2 #snr_test
-            #ratio = extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * extract(self.sqrt_alphas_cumprod, t, x_start.shape) #snr_real
-            #print("t: ", t)
-            #print("guidance: ", ratio * q_score)
-            guidance = torch.clamp(ratio * q_score, -1.0, 1.0) #(-1,1)
+            ratio = extract(
+                self.sqrt_one_minus_alphas_cumprod, t, x_start.shape
+            ) / extract(self.sqrt_alphas_cumprod, t, x_start.shape) # x0_mean
+            
+            #guidance = torch.clamp(ratio * q_score / torch.clamp(q_score_norm, 1.0, 10), -1, 1) # normalization
+            #guidance = torch.clamp(ratio * q_score, -2, 2) #(-1,1)
+            guidance = 2 * F.tanh(0.5 * ratio * q_score)
             rec_loss = torch.tensor([0.0]).to(x_start.device)
+            #weights = weights / torch.clamp(q_score_norm.detach().clone(), 1.0, 10)
             loss = self.loss_fn(x_recon, noise - eta * guidance, weights)# TODO
-            """
-            snr_t = extract(self.alphas_cumprod, t, x_start.shape) / (1 - extract(self.alphas_cumprod, t, x_start.shape))
-            rec_loss = torch.tensor([0.0]).to(x_start.device)
-            loss = self.loss_fn(x_recon, noise, weights) - (snr_t * eta * q_loss).mean() # TODO
         else:
             raise NotImplementedError
 
@@ -366,8 +347,9 @@ class Diffusion(nn.Module):
 
     def loss_with_guidance(self, x, state, value_func, eta, weights=1.0, **kwargs):
         batch_size = len(x)
+        normal_q = kwargs.get("normal_q", 1.0)
         t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
-        return self.p_losses_with_guidance(x, state, value_func, eta, t, weights)
+        return self.p_losses_with_guidance(x, state, value_func, normal_q, eta, t, weights)
 
     def forward(self, state, *args, **kwargs):
         return self.sample(state, *args, **kwargs)

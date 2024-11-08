@@ -10,6 +10,7 @@ from agents.diffusion import Diffusion
 from agents.model import MLP
 from agents.helpers import EMA, SinusoidalPosEmb
 
+"""Trust Region Diffusion Q-Learning (TRDQL) with Energy-based Diffusion Model"""
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim=256):
@@ -47,7 +48,7 @@ class Critic(nn.Module):
         return torch.min(q1, q2)
 
 
-class Diffusion_EG(object):
+class Diffusion_QL(object):
     # TODO: implement OOD detection
     def __init__(self,
                  state_dim,
@@ -152,7 +153,7 @@ class Diffusion_EG(object):
 
             """ Q Training """
             current_q1, current_q2 = self.critic(state, action)
-
+            """
             if self.max_q_backup:
                 next_state_rpt = torch.repeat_interleave(next_state, repeats=10, dim=0)
                 next_action_rpt = self.ema_model(next_state_rpt)
@@ -166,14 +167,17 @@ class Diffusion_EG(object):
                 target_q = torch.min(target_q1, target_q2)
 
             target_q = (reward + not_done * self.discount * target_q).detach()
-
+            """
+            target_q = reward.detach()#TODO:change it back!
             critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
             
             ### OOD penalty ###
-            with torch.no_grad():
-                logp = self.bc_actor.logp_lower(next_action, next_state)
-            penalty =  (- logp) > self.logp_thershold
-            critic_loss += (penalty * (- logp - self.logp_thershold) * target_q).mean()
+            # TODO
+            # with torch.no_grad():
+            #     logp = self.bc_actor.logp_lower(next_action, next_state)
+            # penalty =  (- logp) > self.logp_thershold
+            # critic_loss += (penalty * (- logp - self.logp_thershold) * current_q1).mean() + \
+            #                 (penalty * (- logp - self.logp_thershold) * current_q2).mean()
             
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
@@ -182,7 +186,10 @@ class Diffusion_EG(object):
             self.critic_optimizer.step()
 
             """ Policy Training """
-            actor_loss, bc_loss = self.actor.loss_with_guidance(action, state, self.critic, self.eta)
+            bc_loss = torch.tensor([0.0]).to(action.device)#self.actor.loss(action, state)
+            opt_loss = self.actor.loss_energy_new(action, state, copy.deepcopy(self.critic), copy.deepcopy(self.bc_actor), self.eta)
+            actor_loss = opt_loss #TODO
+            #actor_loss, bc_loss = self.actor.loss_with_guidance(action, state, self.critic, self.eta)
             #actor_loss = self.actor.loss(action, state)  # bc testing
             #bc_loss = actor_loss
             
@@ -231,11 +238,11 @@ class Diffusion_EG(object):
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
     
-    def sample(self, state):
+    def sample(self, state, *args, **kwargs):
         # batched states
         state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = self.actor.sample(state)
+            action = self.actor.sample(state=state, *args, **kwargs)
             q_value = self.critic_target.q_min(state, action)
         return action.cpu().data.numpy(), q_value.cpu().data.numpy()
     

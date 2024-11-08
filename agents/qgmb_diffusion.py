@@ -146,7 +146,7 @@ class Diffusion_QL(object):
             """ Q Training """
             current_q1, current_q2 = self.critic(state, action)
             #print("current_q1:", current_q1.mean().item(), "current_q2:", current_q2.mean().item())
-
+            
             if self.max_q_backup:
                 next_state_rpt = torch.repeat_interleave(next_state, repeats=10, dim=0)
                 next_action_rpt = self.ema_model(next_state_rpt)
@@ -165,19 +165,8 @@ class Diffusion_QL(object):
             target_q = (reward + not_done * self.discount * target_q).detach()
             #print("reward:", reward.shape, "target_q:", target_q.shape, "not_done:", not_done.shape)#
             #target_q = reward.detach()#TODO:change it back!
-
-            if self.ood_detact:
-                with torch.no_grad():
-                    logp, current_action_pred = self.ema_model.logp_lower(action, state, ret_pred=True)
-                current_pred_q1, current_pred_q2 = self.critic(state, current_action_pred)
-                thershold = 0.3
-                penalty =  (- logp) > thershold
-                critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q) + \
-                            0.2 * ((penalty * (- logp - thershold) * current_pred_q1).mean() + \
-                            (penalty * (- logp - thershold) * current_pred_q2).mean())
-                #print("penalty:", penalty)
-            else:
-                critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
+            
+            critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
 
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
@@ -186,7 +175,9 @@ class Diffusion_QL(object):
             self.critic_optimizer.step()
 
             """ Policy Training """
-            actor_loss, bc_loss = self.actor.loss_with_guidance(action, state, copy.deepcopy(self.critic), self._get_eta())
+            bc_loss = torch.tensor([0.0]).to(action.device)#self.actor.loss(action, state)
+            opt_loss = self.actor.loss_energy(action, state, copy.deepcopy(self.critic), self._get_eta())
+            actor_loss = opt_loss #TODO
             
             self.actor_optimizer.zero_grad()
             actor_loss.backward()

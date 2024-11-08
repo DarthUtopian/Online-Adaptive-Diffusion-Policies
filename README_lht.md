@@ -27,15 +27,13 @@ Running experiments based our code could be quite easy, so below we use `walker2
 
 For the bandit toy experiments, run the code below. 
 ```
-D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo ql --env_name 8gaussians --exp dql_base --device 0 --T 5 --ms online --lr_decay --mode eval --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qgmb --env_name rings --exp qgmb_test_v3 --device 0 --T 5 --ms online --lr_decay --mode train --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name 8gaussians --exp bc_test --device 0 --T 100 --ms online --lr_decay --mode eval
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qgmb --env_name 8gaussians --exp qgmb_test_v2 --device 0 --T 5 --ms online --lr_decay --mode train --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name rings --exp x0_new_detached --device 1 --T 100 --ms online --lr_decay --mode train --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qgmb --env_name 8gaussians --exp qgmb_test_v3_05 --device 0 --T 100 --ms online --lr_decay --mode eval --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qg --env_name 8gaussians --exp new_base_norm --device 1 --T 100 --ms online --lr_decay --mode eval --save_best_model
-
-D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo edp --env_name 8gaussians --exp test_edp --device 0 --T 5 --ms online --lr_decay --mode eval --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python bandit_toy.py --algo qgmb --env_name swissroll --exp qgmb_test_v3 --device 0 --T 100 --ms online --lr_decay --mode eval --save_best_model
 ```
 
 For reproducing the optimal results, we recommend running with 'online model selection' as follows. 
@@ -46,15 +44,25 @@ python main.py --env_name walker2d-medium-expert-v2 --device 0 --ms online --lr_
 ```
 D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-expert-v2 --algo bc --exp bc --device 0 --T 5 --ms online --lr_decay --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-replay-v2 --algo eg_ood --exp eg_ood --device 0 --T 5 --ms online --lr_decay --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-replay-v2 --algo ql --exp ql --device 1 --T 20 --ms online --lr_decay --save_best_model
 
 D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name halfcheetah-medium-expert-v2 --algo edp --exp edp_td3 --device 1 --T 5 --ms online --lr_decay --save_best_model
 
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name hopper-medium-expert-v2 --exp x0_mean_w --algo qg --device 0 --T 5 --ms online --lr_decay --save_best_model
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name Walker2d --exp qgmb_test --algo qgmb --device 1 --T 5 --ms online --lr_decay --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name halfcheetah-medium-v2 --exp newbase_newclamp2 --algo qg --device 0 --T 5 --ms online --lr_decay --save_best_model
+
+D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name kitchen-partial-v0 --exp test0_EBS_record --algo qg --device 1 --T 5 --ms online --lr_decay --save_best_model
 ```
 For online tuning:
 ```
-D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name walker2d-medium-expert-v2 --exp online --device 1 --T 5 --ms online --lr_decay --training_mode=online
+D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name Humanoid-v2 --exp qgmb_new_onpolicy --algo qgmb --device 0 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-expert-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 2000
+
+D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name Humanoid-v2 --exp qgmb_all_sample --algo qgmb --device 1 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-expert-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 2000
+
+D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name halfcheetah-medium-replay-v2 --exp test0_pretrained_EBS_DEMO_fast1 --algo qg --device 0 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-replay-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 1000 --model_id 2000
+
+D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name hopper-medium-v2 --exp test0_pretrained_EBS_DEMO_fast1_test --algo qg --device 0 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/hopper-medium-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 1450
 ```
 For conducting 'offline model selection', run the code below. The best_score will be stored in the `best_score_offline.txt` file.
 ```.bash

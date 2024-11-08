@@ -128,6 +128,8 @@ class Diffusion_QL(object):
 
             target_q = (reward + not_done * self.discount * target_q).detach()
 
+            #target_q = reward.detach()#TODO:change it back!
+            
             critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
@@ -153,11 +155,11 @@ class Diffusion_QL(object):
             
             elif train_mode == 'awr':
                 #bc_losses = - self.actor.logp_lower(action, state)
-                imp_weights = (self.eta * torch.min(current_q1, current_q2).detach()).exp() # [batch, 1]
-                w = imp_weights / (imp_weights.sum())
-                actor_loss = self.actor.loss(action, state, w)
+                imp_weights = F.softmax(self.eta * torch.min(current_q1, current_q2).detach(), dim=0) # [batch, 1]
+                actor_loss = self.actor.loss(action, state, imp_weights)
                 #actor_loss = (bc_losses * imp_weights / (imp_weights.sum())).sum()
                 #actor_loss = (bc_losses * imp_weights).sum() / 100
+                
                 q_loss = torch.tensor([0.0]).to(self.device) # dummy
                 bc_loss = torch.tensor([0.0]).to(self.device) #bc_losses.mean()
                 if torch.isnan(actor_loss) or torch.isnan(bc_loss):
@@ -209,11 +211,11 @@ class Diffusion_QL(object):
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
     
-    def sample(self, state):
+    def sample(self, state, *args, **kwargs):
         # batched states
         state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = self.actor.sample(state)
+            action = self.actor.sample(state=state, *args, **kwargs)
             q_value = self.critic_target.q_min(state, action)
         return action.cpu().data.numpy(), q_value.cpu().data.numpy()
     

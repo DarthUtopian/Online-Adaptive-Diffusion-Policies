@@ -70,6 +70,7 @@ class Diffusion_QL(object):
         lr_decay=False,
         lr_maxt=1000,
         grad_norm=1.0,
+        **kwargs
     ):
 
         self.model = MLP(state_dim=state_dim, action_dim=action_dim, device=device)
@@ -113,7 +114,10 @@ class Diffusion_QL(object):
         self.eta = eta  # q_learning weight
         self.device = device
         self.max_q_backup = max_q_backup
-        self.num_updates = 1
+
+        self.num_updates = kwargs.get('num_updates', 1)
+        self.td3_std = kwargs.get('td3_std', 0.0)
+        self.td3_clip = kwargs.get('td3_clip', 0.0)
 
     def step_ema(self):
         if self.step < self.step_start_ema:
@@ -237,12 +241,17 @@ class Diffusion_QL(object):
             q_value = self.critic_target.q_min(state_rpt, action).flatten()
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
+    
+    def sample_action_batch(self, state):
+        state = torch.FloatTensor(state).to(self.device)
+        action = self.actor.sample(state)
+        return action.cpu().data.numpy()
 
-    def sample(self, state):
+    def sample(self, state, *args, **kwargs):
         # batched states
         state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = self.actor.sample(state)
+            action = self.actor.sample(state=state, *args, **kwargs)
             q_value = self.critic_target.q_min(state, action)
         return action.cpu().data.numpy(), q_value.cpu().data.numpy()
 

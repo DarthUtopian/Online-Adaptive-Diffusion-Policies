@@ -24,7 +24,7 @@ hyperparameters = {
         "max_q_backup": False,
         "reward_tune": "no",
         "eval_freq": 50,
-        "num_epochs": 300,
+        "num_epochs": 200,
         "gn": 2.0,
         "top_k": 1,
     },  # 5.0
@@ -45,7 +45,7 @@ hyperparameters = {
         "reward_tune": "no",
         "eval_freq": 50,
         "num_epochs": 200,
-        "gn": 2.0,
+        "gn": 1.0,
         "top_k": 1,
     },
 }
@@ -97,8 +97,9 @@ def train(env, state_dim, action_dim, max_action, device, output_dir, args):
             lr_maxt=args.num_epochs,
             grad_norm=args.gn,
         )
-    elif args.algo == "qg":
-        from agents.qg_diffusion import Diffusion_QL as Agent
+        
+    elif args.algo == "vg":
+        from agents.vg_diffusion import Diffusion_QL as Agent
 
         agent = Agent(
             state_dim=state_dim,
@@ -116,9 +117,62 @@ def train(env, state_dim, action_dim, max_action, device, output_dir, args):
             lr_maxt=args.num_epochs,
             grad_norm=args.gn,
         )
+        
+    elif args.algo == "qg":
+        from agents.qg_diffusion import Diffusion_QL as Agent
+        agent = Agent(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            max_action=max_action,
+            device=device,
+            discount=0,
+            tau=args.tau,
+            max_q_backup=args.max_q_backup,
+            beta_schedule=args.beta_schedule,
+            n_timesteps=args.T,
+            eta=args.eta,
+            lr=args.lr,
+            lr_decay=args.lr_decay,
+            lr_maxt=args.num_epochs,
+            grad_norm=args.gn,
+        )
+    elif args.algo == "qgmb":
+        from agents.qgmb_diffusion import Diffusion_QL as Agent
+        agent = Agent(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            max_action=max_action,
+            device=device,
+            discount=0,
+            tau=args.tau,
+            max_q_backup=args.max_q_backup,
+            beta_schedule=args.beta_schedule,
+            n_timesteps=args.T,
+            eta=args.eta,
+            lr=args.lr,
+            lr_decay=args.lr_decay,
+            lr_maxt=args.num_epochs,
+            grad_norm=args.gn,
+        )
+    elif args.algo == 'trdql':
+        from agents.trdql_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=0,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+        agent.load_bc_model("results_toy/8gaussians|beta-3.0|bc|diffusion-bc|T-100|lr_decay|ms-online|0", 200)##
     elif args.algo == "qgedm":
         from agents.qgedm_diffusion import Diffusion_QL as Agent
-
         agent = Agent(
             state_dim=state_dim,
             action_dim=action_dim,
@@ -225,14 +279,35 @@ def eval(env, state_dim, action_dim, max_action, device, log_dir, args):
 
     if args.algo == "ql":
         from agents.ql_diffusion import Diffusion_QL as Agent
+    elif args.algo == "bc":
+        from agents.bc_diffusion import Diffusion_BC as Agent
     elif args.algo == "edp":
         from agents.edp_diffusion import Diffusion_QL as Agent
     elif args.algo == "qg":
         from agents.qg_diffusion import Diffusion_QL as Agent
+    elif args.algo == "vg":
+        from agents.vg_diffusion import Diffusion_QL as Agent
+    elif args.algo == "qgmb":
+        from agents.qgmb_diffusion import Diffusion_QL as Agent
     elif args.algo == 'qgedm':
         from agents.qgedm_diffusion import Diffusion_QL as Agent
-
-    agent = Agent(
+    elif args.algo == 'trdql':
+        from agents.trdql_diffusion import Diffusion_QL as Agent
+        
+    if args.algo == "bc":
+        agent = Agent(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            max_action=max_action,
+            device=device,
+            discount=0,
+            tau=hyperparams["tau"],
+            beta_schedule=hyperparams["beta_schedule"],
+            n_timesteps=hyperparams["T"],
+            lr=hyperparams["lr"],
+        )
+    else:
+        agent = Agent(
         state_dim=state_dim,
         action_dim=action_dim,
         max_action=max_action,
@@ -318,13 +393,59 @@ def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
     a, b = torch.meshgrid(x_range, y_range, indexing="ij")
     id_mat = torch.stack([a, b], dim=-1)
     
+    x_range = torch.linspace(-4.5, 4.5, 5)#10
+    y_range = torch.linspace(-4.5, 4.5, 5)
+    a, b = torch.meshgrid(x_range, y_range, indexing="ij")
+    act_mat = torch.stack([a, b], dim=-1).reshape(-1, 2)
+    
     for i, task in enumerate(tasks):
-        plt.figure(figsize=(7.0, 3.0))
+        plt.figure(figsize=(18.0, 6.0))
         axes = []
-        G = gridspec.GridSpec(1, 2*len(etas))
-        for j, eta in enumerate(etas):    
+        G = gridspec.GridSpec(1, 4*len(etas))
+        for j, eta in enumerate(etas):  
+            # -----plot scatter------
+            plt.subplot(G[0, 4*j])
+            data, e = energy_sample(task, beta=eta, sample_per_state=2000)
+            plt.gca().set_aspect("equal", adjustable="box")
+            plt.xlim(-4.5, 4.5)
+            #plt.xlim(-1, 1)
+            plt.ylim(-4.5, 4.5)
+            #plt.ylim(-1, 1)
+            mappable = plt.scatter(
+                data[:, 0],
+                data[:, 1],
+                s=1,
+                c=e,
+                cmap="winter",
+                vmin=0,
+                vmax=1,
+                rasterized=True,
+            )
+            plt.yticks(ticks=[-4, -2, 0, 2, 4], labels=[-4, -2, 0, 2, 4])
+                
+            # -----plot sample-----
+            plt.subplot(G[0, 4*j+1])
+            states = np.zeros((2000, policy.state_dim))
+            data, e = policy.sample(np.array(states))  # sampled action
+            plt.gca().set_aspect("equal", adjustable="box")
+            plt.xlim(-4.5, 4.5)
+            #plt.xlim(-1, 1)
+            plt.ylim(-4.5, 4.5)
+            #plt.ylim(-1, 1)
+            plt.scatter(
+                data[:, 0],
+                data[:, 1],
+                s=1,
+                rasterized=True,
+            )
+            plt.yticks(ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None])
+            plt.xticks(ticks=[-4, -2, 0, 2, 4], labels=[-4, -2, 0, 2, 4])
+            axes.append(plt.gca())
+            plt.title(f"eta={eta}")
+            plt.gcf().colorbar(mappable, ax=axes, fraction=0.1, pad=0.02, aspect=12)
+            
             # -----plot value------
-            plt.subplot(G[0, 2*j])
+            plt.subplot(G[0, 4*j+2])
             states = np.zeros((90, 90, policy.state_dim))
             e = policy.critic.q_min( 
                 id_mat.to(policy.device), 
@@ -345,10 +466,10 @@ def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
             axes.append(plt.gca())
             plt.title(f"eta={eta}")
             
-            # -----plot sample-----
-            plt.subplot(G[0, 2*j+1])
-            states = np.zeros((2000, policy.state_dim))
-            data, e = policy.sample(np.array(states))  # sampled action
+            # -----plot trajectories-----
+            plt.subplot(G[0, 4*j+3])
+            states = np.zeros((act_mat.shape[0], policy.state_dim))
+            data, e = policy.sample(state=np.array(states), start_points=act_mat.to(policy.device))  # sampled action
             plt.gca().set_aspect("equal", adjustable="box")
             plt.xlim(-4.5, 4.5)
             #plt.xlim(-1, 1)
@@ -357,14 +478,25 @@ def plot_eval_action(policy, model_id, tasks, etas, save_dir, show=False):
             plt.scatter(
                 data[:, 0],
                 data[:, 1],
-                s=1,
+                s=10,
+                c='red',
                 rasterized=True,
             )
+            plt.scatter(
+                act_mat[:, 0].cpu().numpy().reshape(-1),
+                act_mat[:, 1].cpu().numpy().reshape(-1),
+                s=10,
+                c='blue',
+                rasterized=True,
+            )
+            for k in range(act_mat.shape[0]):
+                plt.arrow(act_mat[k, 0], act_mat[k, 1], data[k, 0]-act_mat[k, 0], data[k, 1]-act_mat[k, 1], head_width=0.3, head_length=0.1, fc='k', ec='k')
+            
             plt.yticks(ticks=[-4, -2, 0, 2, 4], labels=[None, None, None, None, None])
             plt.xticks(ticks=[-4, -2, 0, 2, 4], labels=[-4, -2, 0, 2, 4])
             axes.append(plt.gca())
             plt.title(f"eta={eta}")
-
+            
         plt.tight_layout()
         plt.savefig(save_dir + f"/scatter-action_model{model_id}.png")
         cbar = plt.colorbar(mappable, ax=axes, fraction=0.1, pad=0.02, aspect=12)
@@ -383,7 +515,7 @@ if __name__ == "__main__":
         "--device", default=0, type=int
     )  # device, {"cpu", "cuda", "cuda:0", "cuda:1"}, etc
     parser.add_argument("--env_name", default="8gaussians", type=str)  # bandit tasks
-    parser.add_argument("--beta", default=3.0, type=float)  # env energy
+    parser.add_argument("--beta", default=3.0, type=float)  # env energy 3.0
     parser.add_argument("--dir", default="results_toy", type=str)  # Logging directory
     parser.add_argument("--seed", default=0, type=int)  # Sets PyTorch and Numpy seeds
     parser.add_argument("--num_steps_per_epoch", default=1000, type=int)
@@ -403,7 +535,7 @@ if __name__ == "__main__":
     ### Algo Choice ###
     parser.add_argument(
         "--algo", default="ql", type=str
-    )  # ['bc', 'ql', 'edp', 'qg', 'awr', 'qgedm']
+    )  # ['bc', 'ql', 'edp', 'qg', 'qgmb', 'awr', 'qgedm']
     parser.add_argument(
         "--ms", default="offline", type=str, help="['online', 'offline']"
     )

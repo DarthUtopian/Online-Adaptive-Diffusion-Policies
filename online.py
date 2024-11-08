@@ -14,7 +14,24 @@ from utils.evaluation import eval_policy
 from utils.data_sampler import OffPolicySampler
 from torch.utils.tensorboard import SummaryWriter
 
-
+class RandomActor():
+    def __init__(self, max_action, action_dim):
+        self.max_action = max_action
+        self.action_dim = action_dim
+    def sample_action(self, state):
+        if state.ndim == 1:
+            action = np.random.uniform(-self.max_action, self.max_action, size=(self.action_dim,))
+        elif state.ndim == 2:
+            action = np.random.uniform(-self.max_action, self.max_action, size=(state.shape[0], self.action_dim))
+        return action
+    
+    def sample_action_batch(self, state):
+        if state.ndim == 1:
+            action = np.random.uniform(-self.max_action, self.max_action, size=(self.action_dim,))
+        elif state.ndim == 2:
+            action = np.random.uniform(-self.max_action, self.max_action, size=(state.shape[0], self.action_dim))
+        return action
+        
 def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir, args):
     # TODO: implement offline pre-training and online tunning pipline
 
@@ -33,7 +50,8 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
                       lr=args.lr,
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
-                      grad_norm=args.gn)
+                      grad_norm=args.gn, 
+                      num_updates=args.num_updates)
     elif args.algo == 'edp':
         from agents.edp_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
@@ -49,7 +67,8 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
                       lr=args.lr,
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
-                      grad_norm=args.gn)
+                      grad_norm=args.gn, 
+                      num_updates=args.num_updates)
     elif args.algo == 'qg':
         from agents.qg_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
@@ -63,9 +82,32 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
                       n_timesteps=args.T,
                       eta=args.eta,
                       lr=args.lr,
+                      lr_critic=args.lr_critic, # Q learning rate
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
-                      grad_norm=args.gn)
+                      grad_norm=args.gn,
+                      num_updates=args.num_updates, 
+                      td3_std=args.td3_std, 
+                      td3_clip=args.td3_clip)
+    elif args.algo == 'qgmb':
+        from agents.qgmb_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn,
+                      num_updates=args.num_updates,
+                      td3_std=args.td3_std, 
+                      td3_clip=args.td3_clip)
     elif args.algo == 'bc':
         from agents.bc_diffusion import Diffusion_BC as Agent
         agent = Agent(state_dim=state_dim,
@@ -76,11 +118,16 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
                       tau=args.tau,
                       beta_schedule=args.beta_schedule,
                       n_timesteps=args.T,
-                      lr=args.lr)
+                      lr=args.lr, 
+                      num_updates=args.num_updates)
+        
+    if args.pretrained_dir is not None:
+        # loading pretrained model
+        assert args.model_id is not None
+        agent.load_model(args.pretrained_dir, args.model_id)
     
     # Setting off policy data sampler
-    train_freq = args.batch_size
-    data_sampler = OffPolicySampler(env, 200000, device, train_freq, args.reward_tune)
+    data_sampler = OffPolicySampler(env, args.buffer_size, device, args.sample_batch, args.reward_tune, args.noise_params)
     
     early_stop = False
     stop_check = utils.EarlyStopping(tolerance=1, min_delta=0.)
@@ -89,11 +136,18 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
     # Start training
     evaluations = []
     training_iters = 0
-    max_timesteps = args.num_epochs * args.num_steps_per_epoch
+    max_iter = args.max_iter
     metric = 100.
     utils.print_banner(f"Training Start", separator="*", num_star=90)
-    while (training_iters < max_timesteps) and (not early_stop):
-        iterations = int(args.eval_freq * args.num_steps_per_epoch)
+    
+    if args.pretrained_dir is not None:
+        data_sampler.warmup(agent, args.warmup_steps) #warmup buffer 
+       
+    random_actor = RandomActor(max_action, action_dim)
+    data_sampler.warmup(random_actor, args.warmup_steps) #warmup buffer
+    
+    while (training_iters < max_iter) and (not early_stop):
+        iterations = int(args.eval_interval)
         loss_metric = agent.train(data_sampler,
                                   iterations=iterations,
                                   batch_size=args.batch_size,
@@ -104,7 +158,7 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
 
         # Logging
         utils.print_banner(f"Train step: {training_iters}", separator="*", num_star=90)
-        logger.record_tabular('Trained Epochs', curr_epoch)
+        logger.record_tabular('Training step', training_iters)
         logger.record_tabular('BC Loss', np.mean(loss_metric['bc_loss']))
         logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
@@ -113,7 +167,7 @@ def online_offpolicy(env, state_dim, action_dim, max_action, device, output_dir,
 
         # Evaluation
         eval_res, eval_res_std, eval_norm_res, eval_norm_res_std = eval_policy(agent, args.env_name, args.seed,
-                                                                               eval_episodes=args.eval_episodes)#, render_gif=True, save_dir=output_dir)
+                                                                               eval_episodes=args.num_eval_episodes, normalize=False)#, render_gif=True, save_dir=output_dir)
         evaluations.append([eval_res, eval_res_std, eval_norm_res, eval_norm_res_std,
                             np.mean(loss_metric['bc_loss']), np.mean(loss_metric['ql_loss']),
                             np.mean(loss_metric['actor_loss']), np.mean(loss_metric['critic_loss']),

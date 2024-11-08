@@ -17,28 +17,32 @@ from online import online_offpolicy
 from torch.utils.tensorboard import SummaryWriter
 
 hyperparameters = {
-    'halfcheetah-random-v2':         {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0}, #5.0
-    'walker2d-random-v2':            {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'halfcheetah-medium-v2':         {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'hopper-medium-v2':              {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'walker2d-medium-v2':            {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 1.0,  'top_k': 0}, #1.0
-    'halfcheetah-medium-replay-v2':  {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'hopper-medium-replay-v2':       {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'walker2d-medium-replay-v2':     {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 0}, #1.0
-    'halfcheetah-medium-expert-v2':  {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
-    'hopper-medium-expert-v2':       {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 0},
+    'Walker2d-v2':                   {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'Humanoid-v2':                   {'lr': 3e-4, 'eta': 5.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'Halfcheetah-v2':                {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'halfcheetah-random-v2':         {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 10.0,  'top_k': 0}, #5.0
+    'hopper-random-v2':              {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 10.0,  'top_k': 0},
+    'walker2d-random-v2':            {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 10.0,  'top_k': 0},
+    'halfcheetah-medium-v2':         {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'hopper-medium-v2':              {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 0},
+    'walker2d-medium-v2':            {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 1.0,  'top_k': 0}, #1.0
+    'halfcheetah-medium-replay-v2':  {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
+    'hopper-medium-replay-v2':       {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 0},
+    'walker2d-medium-replay-v2':     {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 4.0,  'top_k': 0}, #1.0
+    'halfcheetah-medium-expert-v2':  {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 7.0,  'top_k': 0},
+    'hopper-medium-expert-v2':       {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 2.0,  'top_k': 0},
     'walker2d-medium-expert-v2':     {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 2000, 'gn': 5.0,  'top_k': 0},
     'antmaze-umaze-v0':              {'lr': 3e-4, 'eta': 0.2,   'max_q_backup': False,  'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 2},
     'antmaze-umaze-diverse-v0':      {'lr': 3e-4, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 3.0,  'top_k': 2},
-    'antmaze-medium-play-v0':        {'lr': 1e-3, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 1},
+    'antmaze-medium-play-v0':        {'lr': 3e-4, 'eta': 0.5,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 2.0,  'top_k': 1},
     'antmaze-medium-diverse-v0':     {'lr': 3e-4, 'eta': 3.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 1.0,  'top_k': 1},
     'antmaze-large-play-v0':         {'lr': 3e-4, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 5.0, 'top_k': 2},
-    'antmaze-large-diverse-v0':      {'lr': 3e-4, 'eta': 1.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 1}, # 1.0 for diff_3
+    'antmaze-large-diverse-v0':      {'lr': 3e-4, 'eta': 2.0,   'max_q_backup': True,   'reward_tune': 'cql_antmaze', 'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 1}, # 1.0 for diff_3
     'pen-human-v1':                  {'lr': 3e-5, 'eta': 0.15,  'max_q_backup': False,  'reward_tune': 'normalize',   'eval_freq': 50, 'num_epochs': 1000, 'gn': 7.0,  'top_k': 2},
     'pen-cloned-v1':                 {'lr': 3e-5, 'eta': 0.1,   'max_q_backup': False,  'reward_tune': 'normalize',   'eval_freq': 50, 'num_epochs': 1000, 'gn': 8.0,  'top_k': 2},
-    'kitchen-complete-v0':           {'lr': 3e-4, 'eta': 0.005, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 250 , 'gn': 9.0,  'top_k': 2},
-    'kitchen-partial-v0':            {'lr': 3e-4, 'eta': 0.005, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 1000, 'gn': 10.0, 'top_k': 2},
-    'kitchen-mixed-v0':              {'lr': 3e-4, 'eta': 0.005, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 1000, 'gn': 10.0, 'top_k': 0},
+    'kitchen-complete-v0':           {'lr': 3e-4, 'eta': 0.001, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 250 , 'gn': 9.0,  'top_k': 2},
+    'kitchen-partial-v0':            {'lr': 3e-4, 'eta': 0.001, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 1000, 'gn': 10.0, 'top_k': 2},
+    'kitchen-mixed-v0':              {'lr': 3e-4, 'eta': 0.001, 'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 50, 'num_epochs': 1000, 'gn': 10.0, 'top_k': 0},
 }
 
 def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args):
@@ -63,8 +67,8 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
-    elif args.algo == 'edp':
-        from agents.edp_diffusion import Diffusion_QL as Agent
+    elif args.algo == 'qgmb':
+        from agents.qgmb_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -79,24 +83,8 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
                       lr_decay=args.lr_decay,
                       lr_maxt=args.num_epochs,
                       grad_norm=args.gn)
-    elif args.algo == 'qg':
-        from agents.qg_diffusion import Diffusion_QL as Agent
-        agent = Agent(state_dim=state_dim,
-                      action_dim=action_dim,
-                      max_action=max_action,
-                      device=device,
-                      discount=args.discount,
-                      tau=args.tau,
-                      max_q_backup=args.max_q_backup,
-                      beta_schedule=args.beta_schedule,
-                      n_timesteps=args.T,
-                      eta=args.eta,
-                      lr=args.lr,
-                      lr_decay=args.lr_decay,
-                      lr_maxt=args.num_epochs,
-                      grad_norm=args.gn)
-    elif args.algo == 'eg_ood':
-        from agents.eg_diffusion_ood import Diffusion_EG as Agent
+    elif args.algo == 'trdql':
+        from agents.trdql_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -156,8 +144,7 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
     evaluations = []
     training_iters = 0
     max_timesteps = args.num_epochs * args.num_steps_per_epoch
-    #agent.load_bc_model("results/halfcheetah-medium-replay-v2|bc|diffusion-bc|T-5|lr_decay|ms-online|0", 1950)##
-    agent.load_bc_model("results/hopper-medium-replay-v2|bc|diffusion-bc|T-5|lr_decay|ms-online|0", 200)##
+    agent.load_bc_model("results/hopper-medium-replay-v2|bc|diffusion-bc|T-5|lr_decay|ms-online|0", 2000)##
     utils.print_banner(f"Policy Training Start", separator="*", num_star=90)
     while (training_iters < max_timesteps) and (not early_stop):
         iterations = int(args.eval_freq * args.num_steps_per_epoch)
@@ -175,7 +162,7 @@ def train_agent(env, state_dim, action_dim, max_action, device, output_dir, args
         logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
         logger.record_tabular('Critic Loss', np.mean(loss_metric['critic_loss']))
-        if 'eta_loss' in loss_metrics.keys():
+        if 'eta_loss' in loss_metric.keys():
             logger.record_tabular('Eta Loss', np.mean(loss_metric['eta_loss']))
         logger.dump_tabular()
 
@@ -268,6 +255,23 @@ def train_and_tune(env, state_dim, action_dim, max_action, device, output_dir, a
                       grad_norm=args.gn)
     elif args.algo == 'qg':
         from agents.qg_diffusion import Diffusion_QL as Agent
+        agent = Agent(state_dim=state_dim,
+                      action_dim=action_dim,
+                      max_action=max_action,
+                      device=device,
+                      discount=args.discount,
+                      tau=args.tau,
+                      max_q_backup=args.max_q_backup,
+                      beta_schedule=args.beta_schedule,
+                      n_timesteps=args.T,
+                      eta=args.eta,
+                      lr=args.lr,
+                      lr_critic=args.lr_critic,
+                      lr_decay=args.lr_decay,
+                      lr_maxt=args.num_epochs,
+                      grad_norm=args.gn)
+    elif args.algo == 'qgmb':
+        from agents.qgmb_diffusion import Diffusion_QL as Agent
         agent = Agent(state_dim=state_dim,
                       action_dim=action_dim,
                       max_action=max_action,
@@ -427,7 +431,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', default=0, type=int)                       # device, {"cpu", "cuda", "cuda:0", "cuda:1"}, etc
     parser.add_argument("--env_name", default="walker2d-medium-expert-v2", type=str)  # OpenAI gym environment name
     parser.add_argument("--dir", default="results", type=str)                    # Logging directory
-    parser.add_argument("--seed", default=1000, type=int)  #0                  # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--seed", default=0, type=int)  #0                  # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--num_steps_per_epoch", default=1000, type=int)
 
     ### Optimization Setups ###
@@ -440,12 +444,30 @@ if __name__ == "__main__":
     parser.add_argument("--discount", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     
-    ### Online Tunning Parameters ###
-    # TODO: add online tunning parameters
+    ### Online Phase Parameters ###
+    ##env parameters
+    parser.add_argument("--vector_env_num", default=32, type=int, help="Number of vector envs") #32
+    parser.add_argument("--vector_env_type", default='async', type=str, help="sync/async")
+    ##training parameters
     parser.add_argument("--lr", default=3e-4, type=float)
+    parser.add_argument("--lr_critic", default=3e-4, type=float) #3e-4
+    parser.add_argument("--max_iter", default=int(1e6), type=int) #1e6
+    parser.add_argument("--eval_interval", default=10000, type=int) #1000
+    parser.add_argument("--num_eval_episodes", default=10, type=int)
+    parser.add_argument("--num_updates", default=1, type=int) # training steps between data collection #1
+    parser.add_argument("--warmup_steps", default=10000, type=int) # warmup buffer 10000
+    parser.add_argument("--buffer_size", default=1000000, type=int) #50000
+    parser.add_argument("--sample_batch", default=32, type=int) #32 # must be an integer multiple of vector_env_num
+    ##exploration parameters
+    parser.add_argument("--td3_std", default=0.2, type=float)# 0 for offline
+    parser.add_argument("--td3_clip", default=0.5, type=float)# 0 for offline
+    parser.add_argument("--noise_params", default={"mean": 0.0, "std": 0.15}, type=dict) # default None
+    ##pretrained checkpoint
+    parser.add_argument("--pretrained_dir", default=None, type=str)
+    parser.add_argument("--model_id", default=None, type=int)
 
     ### Diffusion Setting ###
-    parser.add_argument("--T", default=5, type=int)
+    parser.add_argument("--T", default=5, type=int) # 20 is recommanded for online training
     parser.add_argument("--beta_schedule", default='vp', type=str)
     ### Algo Choice ###
     parser.add_argument("--algo", default="qg", type=str)  # ['bc', 'ql', 'edp', 'qg', 'qgedm', 'eg_ood']
@@ -465,11 +487,10 @@ if __name__ == "__main__":
     args.device = f"cuda:{args.device}" if torch.cuda.is_available() else "cpu"
     print("cuda", torch.cuda.is_available())
     args.output_dir = f'{args.dir}'
-
+        
     args.num_epochs = hyperparameters[args.env_name]['num_epochs']
     args.eval_freq = hyperparameters[args.env_name]['eval_freq']
     args.eval_episodes = 10 if 'v2' in args.env_name else 100
-
     args.lr = hyperparameters[args.env_name]['lr']
     args.eta = hyperparameters[args.env_name]['eta']
     args.max_q_backup = hyperparameters[args.env_name]['max_q_backup']
@@ -493,16 +514,25 @@ if __name__ == "__main__":
     #     raise AssertionError("Experiment under this setting has been done!")
     variant = vars(args)
     variant.update(version=f"Diffusion-Policies-RL")
-
-    env = gym.make(args.env_name)
+    
+    if args.training_mode=='offline':
+        env = gym.make(args.env_name)
+        state_dim = env.observation_space.shape[0]
+        action_dim = env.action_space.shape[0] 
+        max_action = float(env.action_space.high[0])
+    elif args.training_mode=='online':
+        env = gym.vector.make(args.env_name, 
+                              num_envs=args.vector_env_num, 
+                              asynchronous=True if args.vector_env_type=='async' else False)
+        state_dim = env.single_observation_space.shape[0]
+        action_dim = env.single_action_space.shape[0] 
+        max_action = float(env.action_space[0].high[0])
+    else:
+        raise ValueError("Invalid training mode")
 
     env.seed(args.seed)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0] 
-    max_action = float(env.action_space.high[0])
 
     variant.update(state_dim=state_dim)
     variant.update(action_dim=action_dim)
@@ -510,23 +540,21 @@ if __name__ == "__main__":
     setup_logger(os.path.basename(results_dir), variant=variant, log_dir=results_dir)
     utils.print_banner(f"Env: {args.env_name}, state_dim: {state_dim}, action_dim: {action_dim}")
     
-    """
-    train_agent(env,
+    if args.training_mode=='offline':
+        train_agent(env,
                 state_dim,
                 action_dim,
                 max_action,
                 args.device,
                 results_dir,
                 args)
-    """
-    if args.training_mode=='offline':
-        train_and_tune(env,
-                    state_dim,
-                    action_dim,
-                    max_action,
-                    args.device,
-                    results_dir,
-                    args)
+        # train_and_tune(env,
+        #             state_dim,
+        #             action_dim,
+        #             max_action,
+        #             args.device,
+        #             results_dir,
+        #             args)
     elif args.training_mode=="online":
         online_offpolicy(env,
                     state_dim,

@@ -30,7 +30,7 @@ class Diffusion_BC(object):
                                beta_schedule=beta_schedule, n_timesteps=n_timesteps,
                                ).to(device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
-
+        self.state_dim = state_dim
         self.max_action = max_action
         self.action_dim = action_dim
         self.discount = discount
@@ -62,6 +62,13 @@ class Diffusion_BC(object):
         with torch.no_grad():
             action = self.actor.sample(state)
         return action.cpu().data.numpy().flatten()
+    
+    def sample(self, state, *args, **kwargs):
+        # batched states
+        state = torch.FloatTensor(state).to(self.device)
+        with torch.no_grad():
+            action = self.actor.sample(state=state, *args, **kwargs)
+        return action.cpu().data.numpy()
 
     def save_model(self, dir, id=None):
         if id is not None:

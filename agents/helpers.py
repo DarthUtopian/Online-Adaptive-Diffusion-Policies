@@ -28,9 +28,11 @@ class SinusoidalPosEmb(nn.Module):
 
 
 def extract(a, t, x_shape):
-    b, *_ = t.shape
-    out = a.gather(-1, t)
-    return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+    t_shape = t.shape
+    b = t_shape[0]
+    out = a.gather(-1, t.view(-1))
+    #return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+    return out.reshape(b, 1) if len(x_shape) == 2 else out.reshape(b, x_shape[1], 1)
 
 
 def cosine_beta_schedule(timesteps, s=0.008, dtype=torch.float32):
@@ -77,7 +79,7 @@ class WeightedLoss(nn.Module):
             pred, targ : tensor [ batch_size x action_dim ]
         '''
         loss = self._loss(pred, targ)
-        weighted_loss = (loss * weights).mean()
+        weighted_loss = (loss * weights).sum(dim=-1).mean()
         return weighted_loss
 
 class WeightedL1(WeightedLoss):

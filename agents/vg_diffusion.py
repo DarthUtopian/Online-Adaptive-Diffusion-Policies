@@ -6,10 +6,11 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils.logger import logger
 from tqdm import trange, tqdm
-from agents.diffusion import Diffusion
+from agents.diffusion_vg import Diffusion
 from agents.model import MLP
 from agents.helpers import EMA, SinusoidalPosEmb
 
+##### this version is under verification #####
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim=256):
@@ -145,7 +146,7 @@ class Diffusion_QL(object):
             """ Q Training """
             current_q1, current_q2 = self.critic(state, action)
             #print("current_q1:", current_q1.mean().item(), "current_q2:", current_q2.mean().item())
-
+            """
             if self.max_q_backup:
                 next_state_rpt = torch.repeat_interleave(next_state, repeats=10, dim=0)
                 next_action_rpt = self.ema_model(next_state_rpt)
@@ -163,7 +164,8 @@ class Diffusion_QL(object):
                 target_q = torch.min(target_q1, target_q2)
             target_q = (reward + not_done * self.discount * target_q).detach()
             #print("reward:", reward.shape, "target_q:", target_q.shape, "not_done:", not_done.shape)#
-            #target_q = reward.detach()#TODO:change it back!
+            """
+            target_q = reward.detach()#TODO:change it back!
 
             if self.ood_detact:
                 with torch.no_grad():
