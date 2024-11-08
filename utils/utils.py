@@ -8,6 +8,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import matplotlib.animation as animation
 
 
 def print_banner(s, separator="-", num_star=60):
@@ -22,6 +23,21 @@ def make_gif(frames, save_dir, save_name, fps=30) -> None:
     def animate(i): patch.set_data(frames[i])
     anim = FuncAnimation(plt.gcf(), animate, frames=len(frames), interval=1)
     anim.save(os.path.join(save_dir, save_name), writer='pillow', fps=fps)
+    
+def make_mp4(frames, save_dir, save_name, fps=30) -> None:
+    ims = []
+    for i in range(len(frames)):
+        patch = plt.imshow(frames[0])
+        plt.axis('off')
+        patch.set_data(frames[i])
+        ims.append([patch])
+        
+    ani = animation.ArtistAnimation(plt.gcf(), ims, interval=500, repeat_delay=1000)
+    # ani.save("test.gif", writer='pillow')
+    Writer = animation.writers['ffmpeg']
+    writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
+    ani.save(os.path.join(save_dir, save_name),writer=writer)
+
 
 class Progress:
 

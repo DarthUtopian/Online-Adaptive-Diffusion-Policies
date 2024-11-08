@@ -56,7 +56,7 @@ D4RL_SUPPRESS_IMPORT_ERROR=1 python main.py --env_name kitchen-partial-v0 --exp 
 ```
 For online tuning:
 ```
-D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name Humanoid-v2 --exp qgmb_new_onpolicy --algo qgmb --device 0 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-expert-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 2000
+D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name Humanoid-v2 --exp qgmb_new_largebuffer --algo qgmb --device 0 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-expert-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 2000
 
 D4RL_SUPPRESS_IMPORT_ERROR=0 python main.py --env_name Humanoid-v2 --exp qgmb_all_sample --algo qgmb --device 1 --T 5 --ms online --lr_decay --training_mode=online --pretrained_dir "results/halfcheetah-medium-expert-v2|test0_EBS_record|diffusion-qg|T-5|lr_decay|ms-online|10000" --seed 10000 --model_id 2000
 
